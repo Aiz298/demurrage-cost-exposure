@@ -452,6 +452,7 @@ footer p { max-width: none; }
           <h3>Distribution of the net result per call</h3>
           <div class="ctl"><label for="groupBy">Group by</label>
             <select id="groupBy">
+              <option value="none">No grouping (overall)</option>
               <option value="c">Vessel class</option>
               <option value="t">Terminal</option>
               <option value="m">Commodity</option>
@@ -689,7 +690,7 @@ function drawRange(container, groups, opt) {
   opt = opt || {};
   var tails = opt.tails !== false;
   var fz = opt.fz || 1;
-  var W = opt.W || 960, L = opt.L || 210, R = 24, T = 10, rowH = 40 * fz, B = 34 * fz;
+  var W = opt.W || 960, L = opt.L || 210, R = 24, T = 10, rowH = opt.rowH || 40 * fz, B = 34 * fz, bh = opt.bh || 9, cap = Math.max(5, bh * 0.6), mk = opt.mk || 1;
   var H = T + rowH * groups.length + B;
   var s = newSvg(container, W, H, opt.label || "Range chart");
   var lo = 0, hi = 0;
@@ -718,13 +719,13 @@ function drawRange(container, groups, opt) {
     if (tails) {
       el("line", { x1: x(st.p5), x2: x(st.p25), y1: cy, y2: cy, stroke: acc, "stroke-width": 2, "stroke-linecap": "round", "data-k": "p5" }, row);
       el("line", { x1: x(st.p75), x2: x(st.p95), y1: cy, y2: cy, stroke: acc, "stroke-width": 2, "stroke-linecap": "round", "data-k": "p95" }, row);
-      el("line", { x1: x(st.p5), x2: x(st.p5), y1: cy - 5, y2: cy + 5, stroke: acc, "stroke-width": 2, "data-k": "p5" }, row);
-      el("line", { x1: x(st.p95), x2: x(st.p95), y1: cy - 5, y2: cy + 5, stroke: acc, "stroke-width": 2, "data-k": "p95" }, row);
+      el("line", { x1: x(st.p5), x2: x(st.p5), y1: cy - cap, y2: cy + cap, stroke: acc, "stroke-width": 2, "data-k": "p5" }, row);
+      el("line", { x1: x(st.p95), x2: x(st.p95), y1: cy - cap, y2: cy + cap, stroke: acc, "stroke-width": 2, "data-k": "p95" }, row);
     }
-    el("rect", { x: x(st.p25), y: cy - 9, width: Math.max(x(st.p75) - x(st.p25), 2), height: 18, rx: 3, fill: acc, opacity: 0.85, "data-k": "box" }, row);
+    el("rect", { x: x(st.p25), y: cy - bh, width: Math.max(x(st.p75) - x(st.p25), 2), height: bh * 2, rx: 3, fill: acc, opacity: 0.85, "data-k": "box" }, row);
     var m = x(st.mean);
-    el("path", { d: "M" + m + " " + (cy - 8) + "L" + (m + 8) + " " + cy + "L" + m + " " + (cy + 8) + "L" + (m - 8) + " " + cy + "Z", fill: "#e07b1f", stroke: surf, "stroke-width": 1.5, "data-k": "mean" }, row);
-    el("circle", { cx: x(st.p50), cy: cy, r: 6, fill: surf, stroke: ink, "stroke-width": 2, "data-k": "p50" }, row);
+    el("path", { d: "M" + m + " " + (cy - 8 * mk) + "L" + (m + 8 * mk) + " " + cy + "L" + m + " " + (cy + 8 * mk) + "L" + (m - 8 * mk) + " " + cy + "Z", fill: "#e07b1f", stroke: surf, "stroke-width": 1.5, "data-k": "mean" }, row);
+    el("circle", { cx: x(st.p50), cy: cy, r: 6 * mk, fill: surf, stroke: ink, "stroke-width": 2, "data-k": "p50" }, row);
     row.addEventListener("pointermove", function (e) {
       var k = e.target.getAttribute && e.target.getAttribute("data-k");
       showTip(e, g, k);
@@ -952,6 +953,23 @@ function pctTable(table, groups) {
   });
   table.innerHTML = h + "</tbody>";
 }
+function filterLabel(p) {
+  var parts = [];
+  if (p.terminal !== "all") parts.push(TERM[p.terminal]);
+  if (p.vclass !== "all") parts.push(p.vclass);
+  if (p.commodity !== "all") parts.push(cap(p.commodity));
+  return parts.length ? parts.join(" \u00b7 ") : "All calls";
+}
+function statTable(table, st) {
+  var rows = [["p5", "P5"], ["p25", "P25"], ["p50", "Median (P50)"], ["p75", "P75"], ["p95", "P95"], ["mean", "Mean"], ["min", "Worst call"], ["max", "Best call"]];
+  var h = "<thead><tr><th>Statistic</th><th>Net result per call</th></tr></thead><tbody>";
+  h += '<tr data-i="0"><td>Calls</td><td>' + st.calls + " (" + pct(st.shareDem, 1) + " in demurrage)</td></tr>";
+  rows.forEach(function (r) {
+    var v = st[r[0]], rr = Math.round(v);
+    h += '<tr data-i="0"' + (r[0] === "min" ? ' class="all"' : "") + "><td>" + r[1] + '</td><td class="v ' + (rr < 0 ? "neg" : rr > 0 ? "pos" : "") + (r[0] === "p50" ? " med" : "") + '">' + money(v) + "</td></tr>";
+  });
+  table.innerHTML = h + "</tbody>";
+}
 function highlightRow(i) {
   Array.prototype.forEach.call($("pctWhat").querySelectorAll("tr[data-i]"), function (tr) {
     tr.classList.toggle("hl", Number(tr.getAttribute("data-i")) === i);
@@ -979,12 +997,15 @@ function update() {
   kpis($("kpiWhat"), st, ref);
 
   var gb = $("groupBy").value, groups;
-  if (gb === "c") groups = groupStats(rows, function (r) { return r.k.c; }, CLASSES);
+  if (gb === "none") groups = [{ label: filterLabel(p), s: st, all: false }];
+  else if (gb === "c") groups = groupStats(rows, function (r) { return r.k.c; }, CLASSES);
   else if (gb === "t") groups = groupStats(rows, function (r) { return r.k.t; }, ["G", "M"], function (v) { return TERM[v]; });
   else groups = groupStats(rows, function (r) { return r.k.m; }, COMMS, cap);
   if (groups.length === 2) groups = groups.slice(1);     // one group only: the "All calls" row says the same thing
-  drawRange($("boxWhat"), groups, { W: 640, L: 200, nt: 5, fz: 1.3, label: "Box plot of net result per call", onHover: highlightRow });
-  pctTable($("pctWhat"), groups);
+  var single = groups.length === 1;
+  drawRange($("boxWhat"), groups, single ? { W: 640, L: 210, nt: 5, fz: 1.3, rowH: 150, bh: 26, mk: 1.6, label: "Box plot of net result per call" }
+    : { W: 640, L: 200, nt: 5, fz: 1.3, label: "Box plot of net result per call", onHover: highlightRow });
+  if (single) statTable($("pctWhat"), groups[0].s); else pctTable($("pctWhat"), groups);
 
   drawRank($("rankWhat"), rows, "Net result of every call under the chosen terms");
   $("rankWhatNote").textContent = decileNote(rows) + " Median call " + money(st.p50) + "; worst call " + money(st.min) + ".";
@@ -1007,7 +1028,7 @@ var PRESET_BTNS = PRESETS.map(function (pr) {
 });
 ["lm", "drm", "fTerm", "fClass", "fComm", "groupBy"].forEach(function (id) { $(id).addEventListener("input", update); });
 $("reset").addEventListener("click", function () {
-  $("lm").value = 100; $("drm").value = 100; $("fTerm").value = "all"; $("fClass").value = "all"; $("fComm").value = "all"; $("groupBy").value = "c";
+  $("lm").value = 100; $("drm").value = 100; $("fTerm").value = "all"; $("fClass").value = "all"; $("fComm").value = "all"; $("groupBy").value = "none";
   update();
 });
 $("copy").addEventListener("click", function () {
