@@ -1,0 +1,920 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Demurrage Cost Exposure</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet">
+<style>
+/* Plan: harbour-chart palette (cool slate neutrals, deep teal accent), red = demurrage cost, green = despatch saving.
+   Layout: one long report page, sticky section nav, summary first, interactive what-if in the sensitivity section. */
+:root {
+  --bg: #f3f5f6;
+  --surface: #ffffff;
+  --ink: #0f1d26;
+  --ink2: #44535d;
+  --muted: #74838c;
+  --line: #dbe2e5;
+  --accent: #0b5d78;
+  --accent-soft: #e2eff3;
+  --dem: #c0392b;
+  --des: #2d7d4c;
+  --f-display: "IBM Plex Sans Condensed", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+  --f-body: "IBM Plex Sans", "Segoe UI", Helvetica, Arial, sans-serif;
+  --f-mono: "IBM Plex Mono", ui-monospace, Consolas, "Courier New", monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c1419; --surface: #131f26; --ink: #e4ecef; --ink2: #a7b6be; --muted: #758790;
+    --line: #26363f; --accent: #5bb8d6; --accent-soft: #16313b; --dem: #f07862; --des: #5cc488;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c1419; --surface: #131f26; --ink: #e4ecef; --ink2: #a7b6be; --muted: #758790;
+  --line: #26363f; --accent: #5bb8d6; --accent-soft: #16313b; --dem: #f07862; --des: #5cc488;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; scroll-padding-top: 64px; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 16px/1.6 var(--f-body); }
+a { color: var(--accent); }
+h1, h2, h3 { font-family: var(--f-display); text-wrap: balance; margin: 0; line-height: 1.15; }
+h1 { font-size: clamp(2rem, 5vw, 3.1rem); font-weight: 700; letter-spacing: -0.01em; }
+h2 { font-size: 1.85rem; font-weight: 600; }
+h3 { font-size: 1.2rem; font-weight: 600; }
+p { margin: 0; max-width: 68ch; }
+.num, .tabular { font-variant-numeric: tabular-nums; }
+.mono { font-family: var(--f-mono); }
+
+.wrap { max-width: 1120px; margin: 0 auto; padding: 0 20px; }
+header.top { background: var(--surface); border-bottom: 1px solid var(--line); }
+header.top .wrap { padding-top: 40px; padding-bottom: 32px; display: grid; gap: 14px; }
+.kicker { font: 500 0.8rem/1.4 var(--f-mono); color: var(--accent); letter-spacing: 0.06em; text-transform: uppercase; }
+.lede { font-size: 1.15rem; color: var(--ink2); max-width: 70ch; }
+.convention { display: flex; flex-wrap: wrap; gap: 10px 18px; font-size: 0.9rem; color: var(--ink2); }
+.chip { display: inline-flex; align-items: center; gap: 7px; }
+.sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+.sw.dem { background: var(--dem); } .sw.des { background: var(--des); }
+
+nav.sections { position: sticky; top: 0; z-index: 10; background: color-mix(in srgb, var(--bg) 92%, transparent);
+  backdrop-filter: blur(6px); border-bottom: 1px solid var(--line); }
+nav.sections .wrap { display: flex; gap: 4px; overflow-x: auto; padding-top: 8px; padding-bottom: 8px; }
+nav.sections a { white-space: nowrap; text-decoration: none; color: var(--ink2); font-size: 0.92rem; font-weight: 500;
+  padding: 6px 12px; border-radius: 6px; }
+nav.sections a:hover, nav.sections a:focus-visible { background: var(--accent-soft); color: var(--accent); }
+nav.sections a[aria-current="page"] { background: var(--accent); color: var(--surface); }
+section.block { display: none; }
+section.block.active { display: block; }
+.pager { display: flex; justify-content: space-between; gap: 12px; margin-top: 36px; padding-top: 20px; border-top: 1px solid var(--line); }
+.pager a { display: grid; gap: 2px; text-decoration: none; padding: 10px 14px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); color: var(--ink); max-width: 48%; }
+.pager a:hover, .pager a:focus-visible { border-color: var(--accent); }
+.pager a span { font-size: 0.78rem; color: var(--muted); }
+.pager a.next { margin-left: auto; text-align: right; }
+
+section.block { padding: 44px 0 8px; }
+.sec-head { display: grid; gap: 10px; margin-bottom: 26px; }
+.sec-head .kicker { color: var(--muted); }
+.stack { display: grid; gap: 22px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 22px; display: grid; gap: 14px; min-width: 0; align-content: start; }
+.card > .note { font-size: 0.88rem; color: var(--muted); }
+.grid2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 22px; }
+.grid3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 18px; }
+
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px; }
+.sweeps { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; }
+@media (max-width: 720px) { .sweeps { grid-template-columns: 1fr; } }
+.tile { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; display: grid; gap: 4px; position: relative; overflow: hidden; }
+.tile::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--line); }
+.tile.neg::before { background: var(--dem); } .tile.pos::before { background: var(--des); } .tile.acc::before { background: var(--accent); }
+.tile .lab { font-size: 0.82rem; color: var(--ink2); }
+.tile .val { font: 600 clamp(1.35rem, 2.1vw, 1.7rem)/1.15 var(--f-display); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.tile .sub { font-size: 0.8rem; color: var(--muted); }
+.tile.neg .val { color: var(--dem); } .tile.pos .val { color: var(--des); }
+
+.finding { border-left: 4px solid var(--accent); background: var(--accent-soft); padding: 16px 20px; border-radius: 0 10px 10px 0; font-size: 1.05rem; }
+.finding p { max-width: 80ch; }
+
+table.data { border-collapse: collapse; width: 100%; font-size: 0.92rem; font-variant-numeric: tabular-nums; }
+table.data th, table.data td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: right; }
+table.data th { font-weight: 600; color: var(--ink2); font-size: 0.82rem; }
+table.data th:first-child, table.data td:first-child { text-align: left; }
+table.data tr.base td { font-weight: 600; }
+.scroll { overflow-x: auto; }
+.pass { color: var(--des); font: 600 0.8rem var(--f-mono); }
+.neg-t { color: var(--dem); } .pos-t { color: var(--des); }
+
+.rules { counter-reset: r; display: grid; gap: 12px; padding: 0; margin: 0; list-style: none; }
+.rules li { counter-increment: r; display: grid; grid-template-columns: 34px 1fr; gap: 10px; align-items: start; }
+.rules li::before { content: counter(r); font: 600 0.9rem/30px var(--f-mono); text-align: center; width: 30px; height: 30px;
+  border-radius: 50%; background: var(--accent-soft); color: var(--accent); }
+.formula { font-family: var(--f-mono); font-size: 0.88rem; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 2px 7px; white-space: nowrap; }
+.checks { columns: 2 260px; column-gap: 28px; margin: 0; padding: 0; list-style: none; font-size: 0.92rem; }
+.checks li { break-inside: avoid; padding: 4px 0 4px 24px; position: relative; color: var(--ink2); }
+.checks li::before { content: "✓"; position: absolute; left: 2px; color: var(--des); font-weight: 700; }
+
+.chart { width: 100%; overflow-x: auto; }
+.chart svg { display: block; width: 100%; min-width: 620px; height: auto; }
+.chart svg text { font-family: var(--f-body); fill: var(--ink2); }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 18px; font-size: 0.82rem; color: var(--ink2); }
+.legend .k { display: inline-flex; align-items: center; gap: 7px; }
+.lg-line { width: 22px; height: 2px; background: var(--accent); display: inline-block; }
+.lg-bar { width: 18px; height: 10px; background: var(--accent); border-radius: 2px; display: inline-block; opacity: 0.85; }
+.lg-med { width: 11px; height: 11px; border: 2px solid var(--ink); background: var(--surface); border-radius: 50%; display: inline-block; }
+.lg-mean { width: 10px; height: 10px; background: #e07b1f; transform: rotate(45deg); display: inline-block; }
+
+.heat { border-collapse: separate; border-spacing: 6px; width: 100%; min-width: 560px; font-variant-numeric: tabular-nums; }
+.heat th { font-size: 0.84rem; color: var(--ink2); font-weight: 600; text-align: center; padding: 4px; }
+.heat th.row { text-align: left; }
+.heat td { border-radius: 8px; padding: 12px 10px; text-align: center; vertical-align: top; border: 1px solid var(--line); }
+.heat td .m { font: 600 1.2rem/1.2 var(--f-display); }
+.heat td .s { font-size: 0.76rem; color: var(--ink2); }
+.heat td.hot { outline: 2px solid var(--dem); outline-offset: 1px; }
+
+details.more { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 0 22px; }
+details.more summary { cursor: pointer; padding: 16px 0; font-weight: 600; }
+details.more summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+details.more[open] { padding-bottom: 22px; }
+details.more .inner { display: grid; gap: 14px; }
+
+/* What-if panel */
+.whatif { display: grid; grid-template-columns: 320px 1fr; gap: 22px; align-items: start; }
+@media (max-width: 900px) { .whatif { grid-template-columns: 1fr; } }
+.controls { position: sticky; top: 64px; }
+@media (max-width: 900px) { .controls { position: static; } }
+.ctl { display: grid; gap: 4px; }
+.ctl label { display: flex; justify-content: space-between; gap: 8px; font-size: 0.9rem; font-weight: 500; }
+.ctl label output { font: 500 0.88rem var(--f-mono); color: var(--accent); }
+.ctl .hint { font-size: 0.78rem; color: var(--muted); }
+input[type="range"] { width: 100%; accent-color: var(--accent); }
+select { width: 100%; font: inherit; font-size: 0.92rem; padding: 7px 9px; border-radius: 6px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); }
+.presets { display: flex; flex-wrap: wrap; gap: 6px; }
+button { font: 500 0.84rem var(--f-body); border: 1px solid var(--line); background: var(--surface); color: var(--ink);
+  padding: 6px 11px; border-radius: 6px; cursor: pointer; }
+button:hover { border-color: var(--accent); color: var(--accent); }
+button:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+button.primary { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+button.primary:hover { color: var(--surface); filter: brightness(1.1); }
+.delta { font-size: 0.8rem; font-variant-numeric: tabular-nums; }
+.copied { font-size: 0.8rem; color: var(--des); min-height: 1.2em; }
+
+.insights { display: grid; gap: 14px; counter-reset: i; padding: 0; margin: 0; list-style: none; }
+.insights li { counter-increment: i; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px 18px 64px; position: relative; }
+.insights li::before { content: counter(i); position: absolute; left: 20px; top: 16px; font: 700 1.6rem/1 var(--f-display); color: var(--accent); }
+.insights h3 { margin-bottom: 6px; }
+ul.plain { margin: 0; padding-left: 20px; display: grid; gap: 8px; max-width: 80ch; }
+footer { margin-top: 64px; padding: 28px 0 48px; border-top: 1px solid var(--line); font-size: 0.85rem; color: var(--muted); }
+footer p { max-width: none; }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <div class="kicker">SCDD industry project 8 · laytime and demurrage</div>
+    <h1>Demurrage Cost Exposure</h1>
+    <p class="lede">How much the charterer paid in demurrage, and earned back in despatch, across 420 bulk-carrier port calls at two terminals in 2024. The Sensitivity and What-if tabs test how that cost changes with the contract terms.</p>
+    <div class="convention" aria-label="Sign convention">
+      <span>Everything is shown from the <strong>charterer's</strong> side:</span>
+      <span class="chip"><span class="sw dem"></span>negative = demurrage cost</span>
+      <span class="chip"><span class="sw des"></span>positive = despatch saving</span>
+    </div>
+  </div>
+</header>
+
+<nav class="sections" aria-label="Report sections">
+  <div class="wrap">
+    <a href="#overview">Overview</a>
+    <a href="#method">Data and method</a>
+    <a href="#results">Baseline results</a>
+    <a href="#sensitivity">Sensitivity</a>
+    <a href="#whatif">What-if model</a>
+    <a href="#insights">Insights</a>
+    <a href="#limitations">Limitations</a>
+  </div>
+</nav>
+
+<main class="wrap">
+
+<!-- ============================== OVERVIEW -->
+<section class="block" id="overview">
+  <div class="sec-head">
+    <div class="kicker">Overview</div>
+    <h2>The charterer lost about $1.06 million net across 420 calls</h2>
+  </div>
+  <div class="stack">
+    <div class="tiles" id="kpiBase"></div>
+    <div class="finding">
+      <p><strong>Main finding.</strong> Demurrage happens about as often everywhere: close to half of the calls in every terminal and vessel class. What changes is how much it costs when it happens. Large vessels carry most of the cost, and Panamax/Kamsarmax calls at the multi-bulk terminal alone account for <strong>47% of the net loss</strong> from 8% of the calls.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== METHOD -->
+<section class="block" id="method">
+  <div class="sec-head">
+    <div class="kicker">Data and method</div>
+    <h2>How each call's result is worked out</h2>
+    <p>Six datasets were joined: port calls (timestamps, vessel, cargo), laytime terms (notice of readiness, handling rate, demurrage and despatch rates), delay events, a 20-call benchmark, terminal reference ranges and vessel-class ranges.</p>
+  </div>
+  <div class="grid2">
+    <div class="card">
+      <h3>Laytime rules applied to every call</h3>
+      <ol class="rules">
+        <li><div><strong>Laytime starts</strong> at the earlier of notice expiry (<span class="formula">NOR + notice period</span>) and the start of cargo work.</div></li>
+        <li><div><strong>Allowed laytime</strong> is <span class="formula">cargo t ÷ rate t/day × 24</span> hours.</div></li>
+        <li><div><strong>Counted laytime</strong> runs from laytime start to completion of cargo work, minus delay events that do not count toward laytime.</div></li>
+        <li><div><strong>Over the allowance:</strong> the charterer pays demurrage at the contract rate per day, pro rata.</div></li>
+        <li><div><strong>Under the allowance:</strong> the owner pays despatch at 50% of the demurrage rate per day saved.</div></li>
+      </ol>
+    </div>
+    <div class="card">
+      <h3>Data validation: 11 of 11 checks passed</h3>
+      <ul class="checks">
+        <li>420 calls and 420 terms rows</li>
+        <li>Call IDs unique and matching</li>
+        <li>Every delay event links to a call</li>
+        <li>No missing values</li>
+        <li>Delay flag is only yes or no</li>
+        <li>Timestamps in order, arrival to departure</li>
+        <li>Event durations equal end − start</li>
+        <li>DWT and cargo inside vessel-class ranges</li>
+        <li>Handling rate inside terminal range</li>
+        <li>Commodity supported by terminal</li>
+        <li>Despatch rate is 50% of demurrage rate</li>
+      </ul>
+      <p class="note">The recalculated laytime start and allowed laytime also matched the values supplied in the terms file for all 420 calls.</p>
+    </div>
+  </div>
+  <div class="card" style="margin-top:22px">
+    <h3>Reconciliation against the 20-call benchmark</h3>
+    <p>Every output column matches the benchmark answers. The small time differences come from the data storing timestamps to whole seconds while the benchmark used fractions of a second.</p>
+    <div class="scroll">
+      <table class="data">
+        <thead><tr><th>Column</th><th>Largest difference</th><th>In everyday units</th><th>Result</th></tr></thead>
+        <tbody>
+          <tr><td>Elapsed laytime window (h)</td><td>0.000044</td><td>0.16 s</td><td><span class="pass">PASS</span></td></tr>
+          <tr><td>Excluded event hours</td><td>0.000000</td><td>exact</td><td><span class="pass">PASS</span></td></tr>
+          <tr><td>Counted laytime (h)</td><td>0.000044</td><td>0.16 s</td><td><span class="pass">PASS</span></td></tr>
+          <tr><td>Allowed laytime (h)</td><td>0.000046</td><td>0.17 s</td><td><span class="pass">PASS</span></td></tr>
+          <tr><td>Used minus allowed (h)</td><td>0.000075</td><td>0.27 s</td><td><span class="pass">PASS</span></td></tr>
+          <tr><td>Demurrage / despatch days</td><td>0.000002</td><td>0.17 s</td><td><span class="pass">PASS</span></td></tr>
+          <tr><td>Demurrage amount (USD)</td><td>0.035</td><td>3.5 cents</td><td><span class="pass">PASS</span></td></tr>
+          <tr><td>Despatch amount (USD)</td><td>0.015</td><td>1.5 cents</td><td><span class="pass">PASS</span></td></tr>
+          <tr><td>Net result (USD)</td><td>0.035</td><td>3.5 cents</td><td><span class="pass">PASS</span></td></tr>
+          <tr><td>Outcome (demurrage or despatch)</td><td>–</td><td>20 of 20 identical</td><td><span class="pass">PASS</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== RESULTS -->
+<section class="block" id="results">
+  <div class="sec-head">
+    <div class="kicker">Baseline results · contract terms as supplied</div>
+    <h2>A minority of expensive calls drives the loss</h2>
+    <p>The typical call ends close to even: the median is slightly positive. The mean is negative because a small number of calls run far over their allowance.</p>
+  </div>
+  <div class="stack">
+    <div class="card">
+      <h3>Every call, ranked from largest demurrage cost to largest despatch saving</h3>
+      <div class="chart" id="rankBase"></div>
+      <p class="note" id="rankBaseNote"></p>
+    </div>
+
+    <div class="card">
+      <h3>By vessel class: cost rises steadily with vessel size</h3>
+      <div class="legend">
+        <span class="k"><span class="lg-line"></span>P5 to P95</span>
+        <span class="k"><span class="lg-bar"></span>middle half of calls (P25 to P75)</span>
+        <span class="k"><span class="lg-med"></span>median</span>
+        <span class="k"><span class="lg-mean"></span>mean</span>
+      </div>
+      <div class="chart" id="byClass"></div>
+      <p class="note">105 calls per class. Panamax/Kamsarmax calls account for 78% of the total net loss.</p>
+    </div>
+
+    <div class="card">
+      <h3>By terminal</h3>
+      <div class="chart" id="byTerminal"></div>
+      <p class="note">280 calls at the grain elevator, 140 at the multi-bulk terminal. The multi-bulk terminal's agreed handling rates are much lower (about 12,300 t/day against 29,400), so its vessels are allowed more laytime for the same cargo.</p>
+    </div>
+
+    <div class="card">
+      <h3>Terminal × vessel class: the hotspot</h3>
+      <p>Mean net result per call. The size effect appears at both terminals but is far stronger at the multi-bulk terminal.</p>
+      <div class="scroll"><table class="heat" id="heat"></table></div>
+      <p class="note">Each cell holds 35 calls (multi-bulk) or 70 calls (grain elevator), so differences between cells are indicative rather than conclusive. Only means and medians are shown here because the tails of such small groups are unreliable.</p>
+    </div>
+
+    <details class="more">
+      <summary>By commodity (read with care)</summary>
+      <div class="inner">
+        <p>Each commodity is handled at only one terminal and carried by only two vessel classes, so commodity differences cannot be separated from terminal and vessel-size effects. Sugar, for example, arrives on Handymax and Panamax/Kamsarmax vessels at the multi-bulk terminal only.</p>
+        <div class="chart" id="byCommodity"></div>
+      </div>
+    </details>
+  </div>
+</section>
+
+<!-- ============================== SENSITIVITY -->
+<section class="block" id="sensitivity">
+  <div class="sec-head">
+    <div class="kicker">Sensitivity analysis</div>
+    <h2>Allowed laytime matters about ten times more than the demurrage rate</h2>
+    <p>Each contract term is moved on its own while the others stay at their supplied values. The time each vessel actually used is held fixed.</p>
+  </div>
+  <div class="stack">
+    <div class="card">
+      <h3>Which term moves the total most</h3>
+      <div class="chart" id="tornado"></div>
+      <p class="note">Bars show the total net result for all 420 calls at the low and high end of each range. The centre line is the baseline (−$1,058,507).</p>
+    </div>
+
+    <div class="sweeps" id="sweeps"></div>
+
+    <div class="card">
+      <h3>Named scenarios</h3>
+      <div class="scroll"><table class="data" id="scenarios"></table></div>
+      <p class="note">P5 is the per-call result that only the worst 5% of calls fall below.</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== WHAT-IF -->
+<section class="block" id="whatif">
+  <div class="sec-head">
+    <div class="kicker">Interactive model</div>
+    <h2>Try your own contract terms</h2>
+    <p>This runs the same calculation as <span class="formula">laytime_model.py</span> on all 420 calls, directly in the page. At the baseline settings it reproduces the Python results to the cent.</p>
+  </div>
+  <div class="whatif">
+    <div class="card controls">
+      <div class="ctl">
+        <label for="lm">Allowed laytime multiplier <output id="lmOut"></output></label>
+        <input type="range" id="lm" min="0.7" max="1.4" step="0.01" value="1">
+        <span class="hint">Scales every call's free time. 1.10 = 10% more.</span>
+      </div>
+      <div class="ctl">
+        <label for="lo">Extra laytime per call <output id="loOut"></output></label>
+        <input type="range" id="lo" min="-24" max="24" step="1" value="0">
+        <span class="hint">Fixed hours added after the multiplier.</span>
+      </div>
+      <div class="ctl">
+        <label for="drm">Demurrage rate multiplier <output id="drmOut"></output></label>
+        <input type="range" id="drm" min="0.5" max="1.5" step="0.05" value="1">
+        <span class="hint">Despatch rate moves with it.</span>
+      </div>
+      <div class="ctl">
+        <label for="ratio">Despatch rate, % of demurrage <output id="ratioOut"></output></label>
+        <input type="range" id="ratio" min="0" max="0.5" step="0.05" value="0.5">
+        <span class="hint">0% = no despatch clause.</span>
+      </div>
+      <div class="ctl">
+        <label for="fTerm">Terminal</label>
+        <select id="fTerm">
+          <option value="all">All terminals</option>
+          <option value="G">Grain elevator</option>
+          <option value="M">Multi-bulk</option>
+        </select>
+      </div>
+      <div class="ctl">
+        <label for="fClass">Vessel class</label>
+        <select id="fClass">
+          <option value="all">All classes</option>
+          <option>Handysize</option>
+          <option>Handymax</option>
+          <option>Supramax/Ultramax</option>
+          <option>Panamax/Kamsarmax</option>
+        </select>
+      </div>
+      <div class="ctl">
+        <span style="font-size:0.9rem;font-weight:500">Presets</span>
+        <div class="presets" id="presets"></div>
+      </div>
+      <div class="presets">
+        <button class="primary" id="reset" type="button">Reset to baseline</button>
+        <button id="copy" type="button">Copy results as CSV</button>
+      </div>
+      <div class="copied" id="copied" role="status"></div>
+    </div>
+    <div class="stack">
+      <div class="tiles" id="kpiWhat"></div>
+      <div class="card">
+        <h3>Every call under these terms</h3>
+        <div class="chart" id="rankWhat"></div>
+        <p class="note" id="rankWhatNote"></p>
+      </div>
+      <div class="card">
+        <h3>By vessel class under these terms</h3>
+        <div class="chart" id="classWhat"></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================== INSIGHTS -->
+<section class="block" id="insights">
+  <div class="sec-head">
+    <div class="kicker">Insights</div>
+    <h2>What the results suggest</h2>
+  </div>
+  <ol class="insights">
+    <li><h3>Severity, not frequency, drives the cost</h3>
+      <p>About 49.5% of calls end in demurrage in every terminal and vessel class. The worst 10% of calls make up 61% of all demurrage charged, so controlling the few long overruns matters more than the average call.</p></li>
+    <li><h3>Large vessels at the multi-bulk terminal are the priority</h3>
+      <p>Panamax/Kamsarmax calls at the multi-bulk terminal have a median result of −$23,326, so more than half of them lost over $23k each. These 35 calls produce 47% of the net loss.</p></li>
+    <li><h3>Negotiate laytime before rates</h3>
+      <p>Changing allowed laytime by ±10% moves the total by about −$1.33M to +$1.08M. Changing the demurrage rate by ±10% moves it by about ±$106k. A laytime allowance about 9.7% higher, or about 6.6 extra hours per call, would bring the charterer to break-even.</p></li>
+    <li><h3>The despatch clause was worth about $203k across these calls</h3>
+      <p>Without it, the net loss rises to $1.26M. It partly offsets demurrage but cannot cover it, because despatch is paid at half the rate.</p></li>
+  </ol>
+</section>
+
+<!-- ============================== LIMITATIONS -->
+<section class="block" id="limitations">
+  <div class="sec-head">
+    <div class="kicker">Limitations</div>
+    <h2>What these results cannot tell you</h2>
+  </div>
+  <div class="card">
+    <ul class="plain">
+      <li><strong>Small groups.</strong> Terminal × class cells hold 35 to 70 calls. Their means are indicative, and their tails (P5, P95, worst case) are not reliable.</li>
+      <li><strong>Commodity is tied to terminal and vessel class.</strong> Each commodity appears at one terminal on two vessel classes, so its effect cannot be isolated.</li>
+      <li><strong>A balanced dataset.</strong> The near-identical demurrage share in every group suggests the data was built to be balanced. How often demurrage occurs should not be generalised to other fleets or ports.</li>
+      <li><strong>One lever at a time.</strong> The sensitivity charts move one term while holding the rest fixed, and combined changes are only explored in the what-if model.</li>
+      <li><strong>Behaviour held fixed.</strong> The model assumes vessels would use the same time under different terms. In practice, more generous laytime can lead to slower operations.</li>
+      <li><strong>Simplified laytime counting.</strong> Excluded delay events are subtracted as supplied. Clauses such as "once on demurrage, always on demurrage", weather working days or shifting time are not modelled separately.</li>
+      <li><strong>One year, two terminals.</strong> 420 calls during 2024 at two terminals.</li>
+    </ul>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>Built from <span class="mono">laytime_results.csv</span> (output of <span class="mono">laytime_steps1_6.py</span>) using the logic of <span class="mono">laytime_model.py</span>. All figures in US dollars; per-call results are not rounded until display.</p>
+  </div>
+</footer>
+
+<script>
+// Laytime cost-exposure model: a line-for-line port of cost_exposure() in laytime_model.py.
+// Each call: {id, t (terminal), c (vessel class), m (commodity), used (counted laytime h),
+//             allowed (base allowed laytime h), dem (USD/day), des (USD/day)}
+function runModel(calls, p) {
+  p = Object.assign({ lm: 1, lo: 0, drm: 1, ratio: null, terminal: "all", vclass: "all" }, p || {});
+  var out = [];
+  for (var i = 0; i < calls.length; i++) {
+    var k = calls[i];
+    if (p.terminal !== "all" && k.t !== p.terminal) continue;
+    if (p.vclass !== "all" && k.c !== p.vclass) continue;
+    var allowed = Math.max(k.allowed * p.lm + p.lo, 0);
+    var dem = k.dem * p.drm;
+    var des = p.ratio === null ? k.des * p.drm : dem * p.ratio;
+    var d = k.used - allowed;
+    var demAmt = (d > 0 ? d : 0) / 24 * dem;
+    var desAmt = (d < 0 ? -d : 0) / 24 * des;
+    out.push({ k: k, d: d, isDem: d > 0, dem: demAmt, des: desAmt, net: desAmt - demAmt });
+  }
+  return out;
+}
+
+// Linear-interpolation quantile, same as pandas' default.
+function quantile(sorted, q) {
+  var n = sorted.length;
+  if (!n) return NaN;
+  var pos = (n - 1) * q, lo = Math.floor(pos), hi = Math.ceil(pos);
+  return sorted[lo] + (sorted[hi] - sorted[lo]) * (pos - lo);
+}
+
+function summarize(rows) {
+  var net = rows.map(function (r) { return r.net; }).sort(function (a, b) { return a - b; });
+  var sum = function (f) { return rows.reduce(function (s, r) { return s + f(r); }, 0); };
+  var total = sum(function (r) { return r.net; });
+  return {
+    calls: rows.length,
+    shareDem: rows.filter(function (r) { return r.isDem; }).length / rows.length,
+    total: total,
+    mean: total / rows.length,
+    min: net[0], max: net[net.length - 1],
+    p5: quantile(net, 0.05), p25: quantile(net, 0.25), p50: quantile(net, 0.5),
+    p75: quantile(net, 0.75), p95: quantile(net, 0.95),
+    totalDem: sum(function (r) { return r.dem; }),
+    totalDes: sum(function (r) { return r.des; })
+  };
+}
+
+if (typeof module !== "undefined") module.exports = { runModel: runModel, quantile: quantile, summarize: summarize };
+
+</script>
+<script>
+var CALLS = [{"id":"P1-0001","t":"G","c":"Handysize","m":"wheat","used":16.411389,"allowed":20.013846,"dem":9766,"des":4883},{"id":"P1-0002","t":"M","c":"Handymax","m":"sugar","used":100.9,"allowed":112.110865,"dem":10816,"des":5408},{"id":"P1-0003","t":"M","c":"Supramax/Ultramax","m":"fertiliser","used":78.776944,"allowed":82.059233,"dem":15315,"des":7658},{"id":"P1-0004","t":"G","c":"Panamax/Kamsarmax","m":"oilseeds","used":57.873611,"allowed":58.458,"dem":18608,"des":9304},{"id":"P1-0005","t":"G","c":"Handysize","m":"soybean","used":26.099167,"allowed":25.339167,"dem":9305,"des":4652},{"id":"P1-0006","t":"G","c":"Handymax","m":"corn","used":29.760278,"allowed":27.555714,"dem":11293,"des":5646},{"id":"P1-0007","t":"G","c":"Supramax/Ultramax","m":"wheat","used":53.199722,"allowed":46.260769,"dem":12616,"des":6308},{"id":"P1-0008","t":"M","c":"Panamax/Kamsarmax","m":"sugar","used":169.814167,"allowed":135.851441,"dem":17961,"des":8980},{"id":"P1-0009","t":"M","c":"Handysize","m":"fertiliser","used":52.053056,"allowed":63.479094,"dem":8258,"des":4129},{"id":"P1-0010","t":"G","c":"Handymax","m":"oilseeds","used":38.906111,"allowed":43.229,"dem":13183,"des":6592},{"id":"P1-0011","t":"G","c":"Supramax/Ultramax","m":"soybean","used":41.540833,"allowed":43.271667,"dem":12708,"des":6354},{"id":"P1-0012","t":"G","c":"Panamax/Kamsarmax","m":"corn","used":40.421111,"allowed":40.829286,"dem":16997,"des":8498},{"id":"P1-0013","t":"G","c":"Handysize","m":"wheat","used":24.810556,"allowed":24.087692,"dem":10723,"des":5362},{"id":"P1-0014","t":"M","c":"Handymax","m":"sugar","used":91.012222,"allowed":84.27051,"dem":10851,"des":5426},{"id":"P1-0015","t":"M","c":"Supramax/Ultramax","m":"fertiliser","used":120.375278,"allowed":104.674216,"dem":12877,"des":6438},{"id":"P1-0016","t":"G","c":"Panamax/Kamsarmax","m":"oilseeds","used":78.263611,"allowed":62.611,"dem":17319,"des":8660},{"id":"P1-0017","t":"G","c":"Handysize","m":"soybean","used":24.399722,"allowed":29.755833,"dem":10754,"des":5377},{"id":"P1-0018","t":"G","c":"Handymax","m":"corn","used":25.699444,"allowed":28.555,"dem":11686,"des":5843},{"id":"P1-0019","t":"G","c":"Supramax/Ultramax","m":"wheat","used":40.523889,"allowed":42.212308,"dem":15216,"des":7608},{"id":"P1-0020","t":"M","c":"Panamax/Kamsarmax","m":"sugar","used":122.905,"allowed":124.146341,"dem":17248,"des":8624},{"id":"P1-0021","t":"M","c":"Handysize","m":"fertiliser","used":48.876389,"allowed":47.452962,"dem":9598,"des":4799},{"id":"P1-0022","t":"G","c":"Handymax","m":"oilseeds","used":47.1625,"allowed":43.669,"dem":12259,"des":6130},{"id":"P1-0023","t":"G","c":"Supramax/Ultramax","m":"soybean","used":60.051944,"allowed":52.219167,"dem":14700,"des":7350},{"id":"P1-0024","t":"G","c":"Panamax/Kamsarmax","m":"corn","used":55.195556,"allowed":44.156429,"dem":19300,"des":9650},{"id":"P1-0025","t":"G","c":"Handysize","m":"wheat","used":21.918333,"allowed":26.73,"dem":9614,"des":4807},{"id":"P1-0026","t":"M","c":"Handymax","m":"sugar","used":111.949167,"allowed":124.388027,"dem":10260,"des":5130},{"id":"P1-0027","t":"M","c":"Supramax/Ultramax","m":"fertiliser","used":87.445278,"allowed":91.08885,"dem":12758,"des":6379},{"id":"P1-0028","t":"G","c":"Panamax/Kamsarmax","m":"oilseeds","used":62.716667,"allowed":63.35,"dem":19887,"des":9944},{"id":"P1-0029","t":"G","c":"Handysize","m":"soybean","used":30.736111,"allowed":29.840833,"dem":8497,"des":4248},{"id":"P1-0030","t":"G","c":"Handymax","m":"corn","used":36.068889,"allowed":33.397143,"dem":10064,"des":5032},{"id":"P1-0031","t":"G","c":"Supramax/Ultramax","m":"wheat","used":44.605,"allowed":38.786923,"dem":13809,"des":6904},{"id":"P1-0032","t":"M","c":"Panamax/Kamsarmax","m":"sugar","used":218.528333,"allowed":174.822616,"dem":16766,"des":8383},{"id":"P1-0033","t":"M","c":"Handysize","m":"fertiliser","used":39.614167,"allowed":48.310105,"dem":8998,"des":4499},{"id":"P1-0034","t":"G","c":"Handymax","m":"oilseeds","used":34.499444,"allowed":38.333,"dem":12423,"des":6212},{"id":"P1-0035","t":"G","c":"Supramax/Ultramax","m":"soybean","used":37.308056,"allowed":38.8625,"dem":13793,"des":6896},{"id":"P1-0036","t":"G","c":"Panamax/Kamsarmax","m":"corn","used":42.189722,"allowed":42.615714,"dem":17225,"des":8612},{"id":"P1-0037","t":"G","c":"Handysize","m":"wheat","used":26.431389,"allowed":25.661538,"dem":9113,"des":4556},{"id":"P1-0038","t":"M","c":"Handymax","m":"sugar","used":96.043333,"allowed":88.929047,"dem":13370,"des":6685},{"id":"P1-0039","t":"M","c":"Supramax/Ultramax","m":"fertiliser","used":100.200278,"allowed":87.130662,"dem":12471,"des":6236},{"id":"P1-0040","t":"G","c":"Panamax/Kamsarmax","m":"oilseeds","used":94.311389,"allowed":75.449,"dem":19687,"des":9844},{"id":"P1-0041","t":"G","c":"Handysize","m":"soybean","used":24.711944,"allowed":30.136667,"dem":8960,"des":4480},{"id":"P1-0042","t":"G","c":"Handymax","m":"corn","used":28.412778,"allowed":31.57,"dem":10312,"des":5156},{"id":"P1-0043","t":"G","c":"Supramax/Ultramax","m":"wheat","used":38.509167,"allowed":40.113846,"dem":15608,"des":7804},{"id":"P1-0044","t":"M","c":"Panamax/Kamsarmax","m":"sugar","used":159.736944,"allowed":161.350333,"dem":19503,"des":9752},{"id":"P1-0045","t":"M","c":"Handysize","m":"fertiliser","used":56.079444,"allowed":54.445993,"dem":10266,"des":5133},{"id":"P1-0046","t":"G","c":"Handymax","m":"oilseeds","used":43.074722,"allowed":39.884,"dem":13962,"des":6981},{"id":"P1-0047","t":"G","c":"Supramax/Ultramax","m":"soybean","used":49.91,"allowed":43.4,"dem":14654,"des":7327},{"id":"P1-0048","t":"G","c":"Panamax/Kamsarmax","m":"corn","used":60.748333,"allowed":48.598571,"dem":15893,"des":7946},{"id":"P1-0049","t":"G","c":"Handysize","m":"wheat","used":22.546944,"allowed":27.496154,"dem":8590,"des":4295},{"id":"P1-0050","t":"M","c":"Handymax","m":"sugar","used":103.382222,"allowed":114.86918,"dem":13918,"des":6959},{"id":"P1-0051","t":"M","c":"Supramax/Ultramax","m":"fertiliser","used":87.092222,"allowed":90.721254,"dem":15327,"des":7664},{"id":"P1-0052","t":"G","c":"Panamax/Kamsarmax","m":"oilseeds","used":58.015833,"allowed":58.602,"dem":16779,"des":8390},{"id":"P1-0053","t":"G","c":"Handysize","m":"soybean","used":21.868611,"allowed":21.231667,"dem":10603,"des":5302},{"id":"P1-0054","t":"G","c":"Handymax","m":"corn","used":28.653333,"allowed":26.530714,"dem":10944,"des":5472},{"id":"P1-0055","t":"G","c":"Supramax/Ultramax","m":"wheat","used":46.061111,"allowed":40.053077,"dem":15178,"des":7589},{"id":"P1-0056","t":"M","c":"Panamax/Kamsarmax","m":"sugar","used":157.899167,"allowed":126.31929,"dem":19194,"des":9597},{"id":"P1-0057","t":"M","c":"Handysize","m":"fertiliser","used":50.078611,"allowed":61.071429,"dem":10295,"des":5148},{"id":"P1-0058","t":"G","c":"Handymax","m":"oilseeds","used":50.877222,"allowed":56.53,"dem":11713,"des":5856},{"id":"P1-0059","t":"G","c":"Supramax/Ultramax","m":"soybean","used":44.828889,"allowed":46.696667,"dem":15471,"des":7736},{"id":"P1-0060","t":"G","c":"Panamax/Kamsarmax","m":"corn","used":49.803333,"allowed":50.306429,"dem":17880,"des":8940},{"id":"P1-0061","t":"G","c":"Handysize","m":"wheat","used":25.758889,"allowed":25.008462,"dem":8631,"des":4316},{"id":"P1-0062","t":"M","c":"Handymax","m":"sugar","used":92.001111,"allowed":85.186253,"dem":12458,"des":6229},{"id":"P1-0063","t":"M","c":"Supramax/Ultramax","m":"fertiliser","used":125.818611,"allowed":109.407666,"dem":13799,"des":6900},{"id":"P1-0064","t":"G","c":"Panamax/Kamsarmax","m":"oilseeds","used":81.171111,"allowed":64.937,"dem":16282,"des":8141},{"id":"P1-0065","t":"G","c":"Handysize","m":"soybean","used":19.499167,"allowed":23.779167,"dem":8771,"des":4386},{"id":"P1-0066","t":"G","c":"Handymax","m":"corn","used":26.366667,"allowed":29.296429,"dem":11589,"des":5794},{"id":"P1-0067","t":"G","c":"Supramax/Ultramax","m":"wheat","used":45.759722,"allowed":47.666154,"dem":12070,"des":6035},{"id":"P1-0068","t":"M","c":"Panamax/Kamsarmax","m":"sugar","used":165.108333,"allowed":166.776053,"dem":15751,"des":7876},{"id":"P1-0069","t":"M","c":"Handysize","m":"fertiliser","used":48.027778,"allowed":46.62892,"dem":8067,"des":4034},{"id":"P1-0070","t":"G","c":"Handymax","m":"oilseeds","used":60.418333,"allowed":55.943,"dem":13992,"des":6996},{"id":"P1-0071","t":"G","c":"Supramax/Ultramax","m":"soybean","used":45.763333,"allowed":39.794167,"dem":12489,"des":6244},{"id":"P1-0072","t":"G","c":"Panamax/Kamsarmax","m":"corn","used":67.719722,"allowed":54.175714,"dem":15022,"des":7511},{"id":"P1-0073","t":"G","c":"Handysize","m":"wheat","used":15.855556,"allowed":19.336154,"dem":9794,"des":4897},{"id":"P1-0074","t":"M","c":"Handymax","m":"sugar","used":70.024167,"allowed":77.804878,"dem":12605,"des":6302},{"id":"P1-0075","t":"M","c":"Supramax/Ultramax","m":"fertiliser","used":86.035278,"allowed":89.620209,"dem":14083,"des":7042},{"id":"P1-0076","t":"G","c":"Panamax/Kamsarmax","m":"oilseeds","used":58.971389,"allowed":59.567,"dem":16003,"des":8002},{"id":"P1-0077","t":"G","c":"Handysize","m":"soybean","used":27.383333,"allowed":26.585833,"dem":9049,"des":4524},{"id":"P1-0078","t":"G","c":"Handymax","m":"corn","used":43.173611,"allowed":39.975714,"dem":13477,"des":6738},{"id":"P1-0079","t":"G","c":"Supramax/Ultramax","m":"wheat","used":40.719722,"allowed":35.408462,"dem":15585,"des":7792},{"id":"P1-0080","t":"M","c":"Panamax/Kamsarmax","m":"sugar","used":171.876389,"allowed":137.501109,"dem":19566,"des":9783},{"id":"P1-0081","t":"M","c":"Handysize","m":"fertiliser","used":37.814167,"allowed":46.114983,"dem":8094,"des":4047},{"id":"P1-0082","t":"G","c":"Handymax","m":"oilseeds","used":39.858333,"allowed":44.287,"dem":12021,"des":6010},{"id":"P1-0083","t":"G","c":"Supramax/Ultramax","m":"soybean","used":43.360833,"allowed":45.1675,"dem":12203,"des":6102},{"id":"P1-0084","t":"G","c":"Panamax/Kamsarmax","m":"corn","used":52.18,"allowed":52.707143,"dem":19047,"des":9524},{"id":"P1-0085","t":"G","c":"Handysize","m":"wheat","used":25.201111,"allowed":24.466923,"dem":9281,"des":4640},{"id":"P1-0086","t":"M","c":"Handymax","m":"sugar","used":111.345556,"allowed":103.097561,"dem":13986,"des":6993},{"id":"P1-0087","t":"M","c":"Supramax/Ultramax","m":"fertiliser","used":120.970556,"allowed":105.191638,"dem":15512,"des":7756},{"id":"P1-0088","t":"G","c":"Panamax/Kamsarmax","m":"oilseeds","used":70.22,"allowed":56.176,"dem":16051,"des":8026},{"id":"P1-0089","t":"G","c":"Handysize","m":"soybean","used":23.251667,"allowed":28.355833,"dem":9304,"des":4652},{"id":"P1-0090","t":"G","c":"Handymax","m":"corn","used":23.203889,"allowed":25.782143,"dem":13030,"des":6515},{"id":"P1-0091","t":"G","c":"Supramax/Ultramax","m":"wheat","used":37.280556,"allowed":38.833846,"dem":12244,"des":6122},{"id":"P1-0092","t":"M","c":"Panamax/Kamsarmax","m":"sugar","used":159.536944,"allowed":161.148559,"dem":18624,"des":9312},{"id":"P1-0093","t":"M","c":"Handysize","m":"fertiliser","used":66.332778,"allowed":64.400697,"dem":9088,"des":4544},{"id":"P1-0094","t":"G","c":"Handymax","m":"oilseeds","used":60.406389,"allowed":55.932,"dem":12316,"des":6158},{"id":"P1-0095","t":"G","c":"Supramax/Ultramax","m":"soybean","used":49.9175,"allowed":43.406667,"dem":13183,"des":6592},{"id":"P1-0096","t":"G","c":"Panamax/Kamsarmax","m":"corn","used":59.066944,"allowed":47.253571,"dem":15481,"des":7740},{"id":"P1-0097","t":"G","c":"Handysize","m":"wheat","used":23.171111,"allowed":28.257692,"dem":8189,"des":4094},{"id":"P1-0098","t":"M","c":"Handymax","m":"sugar","used":107.129722,"allowed":119.033259,"dem":13732,"des":6866},{"id":"P1-0099","t":"M","c":"Supramax/Ultramax","m":"fertiliser","used":93.8125,"allowed":97.721254,"dem":13303,"des":6652},{"id":"P1-0100","t":"G","c":"Panamax/Kamsarmax","m":"oilseeds","used":59.5375,"allowed":60.139,"dem":18837,"des":9418},{"id":"P1-0101","t":"G","c":"Handysize","m":"soybean","used":22.085833,"allowed":21.4425,"dem":9807,"des":4904},{"id":"P1-0102","t":"G","c":"Handymax","m":"corn","used":42.386944,"allowed":39.247143,"dem":12347,"des":6174},{"id":"P1-0103","t":"G","c":"Supramax/Ultramax","m":"wheat","used":55.374444,"allowed":48.151538,"dem":14174,"des":7087},{"id":"P1-0104","t":"M","c":"Panamax/Kamsarmax","m":"sugar","used":201.843056,"allowed":161.474501,"dem":19293,"des":9646},{"id":"P1-0105","t":"M","c":"Handysize","m":"fertiliser","used":48.81,"allowed":59.52439,"dem":9177,"des":4588},{"id":"P1-0106","t":"G","c":"Handymax","m":"oilseeds","used":35.622778,"allowed":39.581,"dem":10039,"des":5020},{"id":"P1-0107","t":"G","c":"Supramax/Ultramax","m":"soybean","used":41.043889,"allowed":42.754167,"dem":12366,"des":6183},{"id":"P1-0108","t":"G","c":"Panamax/Kamsarmax","m":"corn","used":50.815278,"allowed":51.328571,"dem":16523,"des":8262},{"id":"P1-0109","t":"G","c":"Handysize","m":"wheat","used":24.468889,"allowed":23.756154,"dem":10611,"des":5306},{"id":"P1-0110","t":"M","c":"Handymax","m":"sugar","used":99.922778,"allowed":92.521064,"dem":11435,"des":5718},{"id":"P1-0111","t":"M","c":"Supramax/Ultramax","m":"fertiliser","used":92.891667,"allowed":80.775261,"dem":13214,"des":6607},{"id":"P1-0112","t":"G","c":"Panamax/Kamsarmax","m":"oilseeds","used":77.5425,"allowed":62.034,"dem":19877,"des":9938},{"id":"P1-0113","t":"G","c":"Handysize","m":"soybean","used":21.423333,"allowed":26.125833,"dem":9211,"des":4606},{"id":"P1-0114","t":"G","c":"Handymax","m":"corn","used":30.303889,"allowed":33.670714,"dem":13466,"des":6733},{"id":"P1-0115","t":"G","c":"Supramax/Ultramax","m":"wheat","used":34.194444,"allowed":35.619231,"dem":13461,"des":6730},{"id":"P1-0116","t":"M","c":"Panamax/Kamsarmax","m":"sugar","used":160.035556,"allowed":161.651885,"dem":18574,"des":9287},{"id":"P1-0117","t":"M","c":"Handysize","m":"fertiliser","used":56.0975,"allowed":54.463415,"dem":10715,"des":5358},{"id":"P1-0118","t":"G","c":"Handymax","m":"oilseeds","used":57.906389,"allowed":53.617,"dem":13103,"des":6552},{"id":"P1-0119","t":"G","c":"Supramax/Ultramax","m":"soybean","used":54.445833,"allowed":47.344167,"dem":15732,"des":7866},{"id":"P1-0120","t":"G","c":"Panamax/Kamsarmax","m":"corn","used":52.929444,"allowed":42.343571,"dem":17219,"des":8610},{"id":"P1-0121","t":"G","c":"Handysize","m":"wheat","used":21.33,"allowed":26.012308,"dem":9438,"des":4719},{"id":"P1-0122","t":"M","c":"Handymax","m":"sugar","used":94.517778,"allowed":105.019956,"dem":12778,"des":6389},{"id":"P1-0123","t":"M","c":"Supramax/Ultramax","m":"fertiliser","used":93.978056,"allowed":97.893728,"dem":15101,"des":7550},{"id":"P1-0124","t":"G","c":"Panamax/Kamsarmax","m":"oilseeds","used":75.586389,"allowed":76.35,"dem":16773,"des":8386},{"id":"P1-0125","t":"G","c":"Handysize","m":"soybean","used":23.123611,"allowed":22.45,"dem":9570,"des":4785},{"id":"P1-0126","t":"G","c":"Handymax","m":"corn","used":28.286667,"allowed":26.191429,"dem":11454,"des":5727},{"id":"P1-0127","t":"G","c":"Supramax/Ultramax","m":"wheat","used":55.260833,"allowed":48.053077,"dem":12518,"des":6259},{"id":"P1-0128","t":"M","c":"Panamax/Kamsarmax","m":"sugar","used":218.478333,"allowed":174.782705,"dem":19370,"des":9685},{"id":"P1-0129","t":"M","c":"Handysize","m":"fertiliser","used":52.818611,"allowed":64.412892,"dem":8650,"des":4325},{"id":"P1-0130","t":"G","c":"Handymax","m":"oilseeds","used":40.078611,"allowed":44.532,"dem":10368,"des":5184},{"id":"P1-0131","t":"G","c":"Supramax/Ultramax","m":"soybean","used":39.279167,"allowed":40.915833,"dem":13800,"des":6900},{"id":"P1-0132","t":"G","c":"Panamax/Kamsarmax","m":"corn","used":51.588333,"allowed":52.109286,"dem":19904,"des":9952},{"id":"P1-0133","t":"G","c":"Handysize","m":"wheat","used":22.328056,"allowed":21.677692,"dem":8657,"des":4328},{"id":"P1-0134","t":"M","c":"Handymax","m":"sugar","used":106.146389,"allowed":98.283814,"dem":11814,"des":5907},{"id":"P1-0135","t":"M","c":"Supramax/Ultramax","m":"fertiliser","used":91.194444,"allowed":79.299652,"dem":12954,"des":6477},{"id":"P1-0136","t":"G","c":"Panamax/Kamsarmax","m":"oilseeds","used":80.606389,"allowed":64.485,"dem":15718,"des":7859},{"id":"P1-0137","t":"G","c":"Handysize","m":"soybean","used":18.292778,"allowed":22.308333,"dem":9369,"des":4684},{"id":"P1-0138","t":"G","c":"Handymax","m":"corn","used":24.925556,"allowed":27.695,"dem":12212,"des":6106},{"id":"P1-0139","t":"G","c":"Supramax/Ultramax","m":"wheat","used":35.008889,"allowed":36.467692,"dem":13917,"des":6958},{"id":"P1-0140","t":"M","c":"Panamax/Kamsarmax","m":"sugar","used":172.878889,"allowed":174.625277,"dem":19518,"des":9759},{"id":"P1-0141","t":"M","c":"Handysize","m":"fertiliser","used":64.714167,"allowed":62.829268,"dem":8978,"des":4489},{"id":"P1-0142","t":"G","c":"Handymax","m":"oilseeds","used":42.447222,"allowed":39.303,"dem":10372,"des":5186},{"id":"P1-0143","t":"G","c":"Supramax/Ultramax","m":"soybean","used":50.461944,"allowed":43.88,"dem":13421,"des":6710},{"id":"P1-0144","t":"G","c":"Panamax/Kamsarmax","m":"corn","used":52.991944,"allowed":42.393571,"dem":17420,"des":8710},{"id":"P1-0145","t":"G","c":"Handysize","m":"wheat","used":17.958056,"allowed":21.9,"dem":9394,"des":4697},{"id":"P1-0146","t":"M","c":"Handymax","m":"sugar","used":104.978611,"allowed":116.643016,"dem":10072,"des":5036},{"id":"P1-0147","t":"M","c":"Supramax/Ultramax","m":"fertiliser","used":97.603889,"allowed":101.670732,"dem":15532,"des":7766},{"id":"P1-0148","t":"G","c":"Panamax/Kamsarmax","m":"oilseeds","used":78.995833,"allowed":79.794,"dem":15885,"des":7942},{"id":"P1-0149","t":"G","c":"Handysize","m":"soybean","used":23.191389,"allowed":22.515833,"dem":8767,"des":4384},{"id":"P1-0150","t":"G","c":"Handymax","m":"corn","used":33.108889,"allowed":30.656429,"dem":12514,"des":6257},{"id":"P1-0151","t":"G","c":"Supramax/Ultramax","m":"wheat","used":43.922778,"allowed":38.193846,"dem":12181,"des":6090},{"id":"P1-0152","t":"M","c":"Panamax/Kamsarmax","m":"sugar","used":204.312778,"allowed":163.450111,"dem":17704,"des":8852},{"id":"P1-0153","t":"M","c":"Handysize","m":"fertiliser","used":48.332778,"allowed":58.942509,"dem":10476,"des":5238},{"id":"P1-0154","t":"G","c":"Handymax","m":"oilseeds","used":45.031667,"allowed":50.035,"dem":12250,"des":6125},{"id":"P1-0155","t":"G","c":"Supramax/Ultramax","m":"soybean","used":45.131944,"allowed":47.0125,"dem":12342,"des":6171},{"id":"P1-0156","t":"G","c":"Panamax/Kamsarmax","m":"corn","used":39.9825,"allowed":40.386429,"dem":19449,"des":9724},{"id":"P1-0157","t":"G","c":"Handysize","m":"wheat","used":28.135,"allowed":27.315385,"dem":8250,"des":4125},{"id":"P1-0158","t":"M","c":"Handymax","m":"sugar","used":84.948889,"allowed":78.656319,"dem":12680,"des":6340},{"id":"P1-0159","t":"M","c":"Supramax/Ultramax","m":"fertiliser","used":99.442778,"allowed":86.472125,"dem":13262,"des":6631},{"id":"P1-0160","t":"G","c":"Panamax/Kamsarmax","m":"oilseeds","used":81.476389,"allowed":65.181,"dem":19455,"des":9728},{"id":"P1-0161","t":"G","c":"Handysize","m":"soybean","used":18.232222,"allowed":22.234167,"dem":10258,"des":5129},{"id":"P1-0162","t":"G","c":"Handymax","m":"corn","used":34.695,"allowed":38.55,"dem":11570,"des":5785},{"id":"P1-0163","t":"G","c":"Supramax/Ultramax","m":"wheat","used":44.295278,"allowed":46.140769,"dem":13054,"des":6527},{"id":"P1-0164","t":"M","c":"Panamax/Kamsarmax","m":"sugar","used":120.7625,"allowed":121.982262,"dem":18624,"des":9312},{"id":"P1-0165","t":"M","c":"Handysize","m":"fertiliser","used":58.378056,"allowed":56.6777,"dem":10367,"des":5184},{"id":"P1-0166","t":"G","c":"Handymax","m":"oilseeds","used":51.078611,"allowed":47.295,"dem":12811,"des":6406},{"id":"P1-0167","t":"G","c":"Supramax/Ultramax","m":"soybean","used":57.190278,"allowed":49.730833,"dem":12978,"des":6489},{"id":"P1-0168","t":"G","c":"Panamax/Kamsarmax","m":"corn","used":54.114167,"allowed":43.291429,"dem":15239,"des":7620},{"id":"P1-0169","t":"G","c":"Handysize","m":"wheat","used":19.936111,"allowed":24.312308,"dem":8988,"des":4494},{"id":"P1-0170","t":"M","c":"Handymax","m":"sugar","used":103.881111,"allowed":115.423503,"dem":13227,"des":6614},{"id":"P1-0171","t":"M","c":"Supramax/Ultramax","m":"fertiliser","used":97.446667,"allowed":101.506969,"dem":15043,"des":7522},{"id":"P1-0172","t":"G","c":"Panamax/Kamsarmax","m":"oilseeds","used":61.444444,"allowed":62.065,"dem":15718,"des":7859},{"id":"P1-0173","t":"G","c":"Handysize","m":"soybean","used":29.453611,"allowed":28.595833,"dem":9267,"des":4634},{"id":"P1-0174","t":"G","c":"Handymax","m":"corn","used":36.581111,"allowed":33.871429,"dem":13808,"des":6904},{"id":"P1-0175","t":"G","c":"Supramax/Ultramax","m":"wheat","used":52.755,"allowed":45.873846,"dem":12384,"des":6192},{"id":"P1-0176","t":"M","c":"Panamax/Kamsarmax","m":"sugar","used":194.429167,"allowed":155.543237,"dem":19960,"des":9980},{"id":"P1-0177","t":"M","c":"Handysize","m":"fertiliser","used":39.71,"allowed":48.426829,"dem":10114,"des":5057},{"id":"P1-0178","t":"G","c":"Handymax","m":"oilseeds","used":50.092222,"allowed":55.658,"dem":13445,"des":6722},{"id":"P1-0179","t":"G","c":"Supramax/Ultramax","m":"soybean","used":38.024167,"allowed":39.608333,"dem":13506,"des":6753},{"id":"P1-0180","t":"G","c":"Panamax/Kamsarmax","m":"corn","used":51.088889,"allowed":51.605,"dem":16556,"des":8278},{"id":"P1-0181","t":"G","c":"Handysize","m":"wheat","used":27.021667,"allowed":26.234615,"dem":9575,"des":4788},{"id":"P1-0182","t":"M","c":"Handymax","m":"sugar","used":118.328056,"allowed":109.563193,"dem":12733,"des":6366},{"id":"P1-0183","t":"M","c":"Supramax/Ultramax","m":"fertiliser","used":101.708889,"allowed":88.442509,"dem":15973,"des":7986},{"id":"P1-0184","t":"G","c":"Panamax/Kamsarmax","m":"oilseeds","used":86.84,"allowed":69.472,"dem":15102,"des":7551},{"id":"P1-0185","t":"G","c":"Handysize","m":"soybean","used":22.0375,"allowed":26.875,"dem":9732,"des":4866},{"id":"P1-0186","t":"G","c":"Handymax","m":"corn","used":34.953333,"allowed":38.837143,"dem":10537,"des":5268},{"id":"P1-0187","t":"G","c":"Supramax/Ultramax","m":"wheat","used":38.441389,"allowed":40.043077,"dem":15602,"des":7801},{"id":"P1-0188","t":"M","c":"Panamax/Kamsarmax","m":"sugar","used":174.655,"allowed":176.419069,"dem":18372,"des":9186},{"id":"P1-0189","t":"M","c":"Handysize","m":"fertiliser","used":56.656944,"allowed":55.006969,"dem":8373,"des":4186},{"id":"P1-0190","t":"G","c":"Handymax","m":"oilseeds","used":51.440278,"allowed":47.63,"dem":10802,"des":5401},{"id":"P1-0191","t":"G","c":"Supramax/Ultramax","m":"soybean","used":52.505,"allowed":45.656667,"dem":12695,"des":6348},{"id":"P1-0192","t":"G","c":"Panamax/Kamsarmax","m":"corn","used":64.515,"allowed":51.612143,"dem":18686,"des":9343},{"id":"P1-0193","t":"G","c":"Handysize","m":"wheat","used":19.775,"allowed":24.116154,"dem":10140,"des":5070},{"id":"P1-0194","t":"M","c":"Handymax","m":"sugar","used":111.562222,"allowed":123.957871,"dem":14000,"des":7000},{"id":"P1-0195","t":"M","c":"Supramax/Ultramax","m":"fertiliser","used":83.195556,"allowed":86.662021,"dem":13804,"des":6902},{"id":"P1-0196","t":"G","c":"Panamax/Kamsarmax","m":"oilseeds","used":55.216389,"allowed":55.774,"dem":19320,"des":9660},{"id":"P1-0197","t":"G","c":"Handysize","m":"soybean","used":22.118333,"allowed":21.474167,"dem":9232,"des":4616},{"id":"P1-0198","t":"G","c":"Handymax","m":"corn","used":29.876667,"allowed":27.663571,"dem":13188,"des":6594},{"id":"P1-0199","t":"G","c":"Supramax/Ultramax","m":"wheat","used":51.322778,"allowed":44.628462,"dem":15636,"des":7818},{"id":"P1-0200","t":"M","c":"Panamax/Kamsarmax","m":"sugar","used":172.206389,"allowed":137.764967,"dem":18696,"des":9348},{"id":"P1-0201","t":"M","c":"Handysize","m":"fertiliser","used":42.015833,"allowed":51.238676,"dem":8891,"des":4446},{"id":"P1-0202","t":"G","c":"Handymax","m":"oilseeds","used":34.590556,"allowed":38.434,"dem":11605,"des":5802},{"id":"P1-0203","t":"G","c":"Supramax/Ultramax","m":"soybean","used":48.747778,"allowed":50.779167,"dem":13714,"des":6857},{"id":"P1-0204","t":"G","c":"Panamax/Kamsarmax","m":"corn","used":42.705833,"allowed":43.137143,"dem":15001,"des":7500},{"id":"P1-0205","t":"G","c":"Handysize","m":"wheat","used":20.475556,"allowed":19.879231,"dem":10288,"des":5144},{"id":"P1-0206","t":"M","c":"Handymax","m":"sugar","used":117.578611,"allowed":108.86918,"dem":12329,"des":6164},{"id":"P1-0207","t":"M","c":"Supramax/Ultramax","m":"fertiliser","used":111.143056,"allowed":96.646341,"dem":14701,"des":7350},{"id":"P1-0208","t":"G","c":"Panamax/Kamsarmax","m":"oilseeds","used":99.8375,"allowed":79.87,"dem":15757,"des":7878},{"id":"P1-0209","t":"G","c":"Handysize","m":"soybean","used":20.217222,"allowed":24.655,"dem":9821,"des":4910},{"id":"P1-0210","t":"G","c":"Handymax","m":"corn","used":31.458889,"allowed":34.954286,"dem":12614,"des":6307},{"id":"P1-0211","t":"G","c":"Supramax/Ultramax","m":"wheat","used":35.269722,"allowed":36.739231,"dem":14172,"des":7086},{"id":"P1-0212","t":"M","c":"Panamax/Kamsarmax","m":"sugar","used":142.553333,"allowed":143.993348,"dem":15210,"des":7605},{"id":"P1-0213","t":"M","c":"Handysize","m":"fertiliser","used":50.376667,"allowed":48.909408,"dem":10276,"des":5138},{"id":"P1-0214","t":"G","c":"Handymax","m":"oilseeds","used":51.044167,"allowed":47.263,"dem":13295,"des":6648},{"id":"P1-0215","t":"G","c":"Supramax/Ultramax","m":"soybean","used":56.520556,"allowed":49.148333,"dem":12027,"des":6014},{"id":"P1-0216","t":"G","c":"Panamax/Kamsarmax","m":"corn","used":64.552778,"allowed":51.642143,"dem":18154,"des":9077},{"id":"P1-0217","t":"G","c":"Handysize","m":"wheat","used":23.156944,"allowed":28.24,"dem":10154,"des":5077},{"id":"P1-0218","t":"M","c":"Handymax","m":"sugar","used":85.046944,"allowed":94.496674,"dem":12440,"des":6220},{"id":"P1-0219","t":"M","c":"Supramax/Ultramax","m":"fertiliser","used":93.508056,"allowed":97.404181,"dem":15338,"des":7669},{"id":"P1-0220","t":"G","c":"Panamax/Kamsarmax","m":"oilseeds","used":78.681111,"allowed":79.476,"dem":16393,"des":8196},{"id":"P1-0221","t":"G","c":"Handysize","m":"soybean","used":23.205,"allowed":22.529167,"dem":10629,"des":5314},{"id":"P1-0222","t":"G","c":"Handymax","m":"corn","used":27.980556,"allowed":25.907857,"dem":11998,"des":5999},{"id":"P1-0223","t":"G","c":"Supramax/Ultramax","m":"wheat","used":49.657778,"allowed":43.180769,"dem":14296,"des":7148},{"id":"P1-0224","t":"M","c":"Panamax/Kamsarmax","m":"sugar","used":181.158611,"allowed":144.926829,"dem":16079,"des":8040},{"id":"P1-0225","t":"M","c":"Handysize","m":"fertiliser","used":51.594444,"allowed":62.919861,"dem":9188,"des":4594},{"id":"P1-0226","t":"G","c":"Handymax","m":"oilseeds","used":31.855556,"allowed":35.395,"dem":13883,"des":6942},{"id":"P1-0227","t":"G","c":"Supramax/Ultramax","m":"soybean","used":48.711111,"allowed":50.740833,"dem":12428,"des":6214},{"id":"P1-0228","t":"G","c":"Panamax/Kamsarmax","m":"corn","used":52.820556,"allowed":53.354286,"dem":17865,"des":8932},{"id":"P1-0229","t":"G","c":"Handysize","m":"wheat","used":21.637778,"allowed":21.007692,"dem":9097,"des":4548},{"id":"P1-0230","t":"M","c":"Handymax","m":"sugar","used":130.986389,"allowed":121.283814,"dem":11327,"des":5664},{"id":"P1-0231","t":"M","c":"Supramax/Ultramax","m":"fertiliser","used":101.21,"allowed":88.008711,"dem":13239,"des":6620},{"id":"P1-0232","t":"G","c":"Panamax/Kamsarmax","m":"oilseeds","used":70.665,"allowed":56.532,"dem":15945,"des":7972},{"id":"P1-0233","t":"G","c":"Handysize","m":"soybean","used":19.630833,"allowed":23.94,"dem":10715,"des":5358},{"id":"P1-0234","t":"G","c":"Handymax","m":"corn","used":31.02,"allowed":34.466429,"dem":12976,"des":6488},{"id":"P1-0235","t":"G","c":"Supramax/Ultramax","m":"wheat","used":36.746667,"allowed":38.277692,"dem":12244,"des":6122},{"id":"P1-0236","t":"M","c":"Panamax/Kamsarmax","m":"sugar","used":147.617778,"allowed":149.108647,"dem":15754,"des":7877},{"id":"P1-0237","t":"M","c":"Handysize","m":"fertiliser","used":55.0925,"allowed":53.487805,"dem":8779,"des":4390},{"id":"P1-0238","t":"G","c":"Handymax","m":"oilseeds","used":45.9175,"allowed":42.516,"dem":13032,"des":6516},{"id":"P1-0239","t":"G","c":"Supramax/Ultramax","m":"soybean","used":60.078889,"allowed":52.2425,"dem":12437,"des":6218},{"id":"P1-0240","t":"G","c":"Panamax/Kamsarmax","m":"corn","used":66.219444,"allowed":52.975714,"dem":17851,"des":8926},{"id":"P1-0241","t":"G","c":"Handysize","m":"wheat","used":17.273056,"allowed":21.064615,"dem":9001,"des":4500},{"id":"P1-0242","t":"M","c":"Handymax","m":"sugar","used":100.644444,"allowed":111.827051,"dem":10616,"des":5308},{"id":"P1-0243","t":"M","c":"Supramax/Ultramax","m":"fertiliser","used":93.8125,"allowed":97.721254,"dem":12183,"des":6092},{"id":"P1-0244","t":"G","c":"Panamax/Kamsarmax","m":"oilseeds","used":54.558889,"allowed":55.11,"dem":15439,"des":7720},{"id":"P1-0245","t":"G","c":"Handysize","m":"soybean","used":31.584167,"allowed":30.664167,"dem":8922,"des":4461},{"id":"P1-0246","t":"G","c":"Handymax","m":"corn","used":31.396944,"allowed":29.071429,"dem":10740,"des":5370},{"id":"P1-0247","t":"G","c":"Supramax/Ultramax","m":"wheat","used":43.013611,"allowed":37.403077,"dem":15432,"des":7716},{"id":"P1-0248","t":"M","c":"Panamax/Kamsarmax","m":"sugar","used":163.118056,"allowed":130.494457,"dem":18247,"des":9124},{"id":"P1-0249","t":"M","c":"Handysize","m":"fertiliser","used":46.388611,"allowed":56.571429,"dem":10589,"des":5294},{"id":"P1-0250","t":"G","c":"Handymax","m":"oilseeds","used":39.524444,"allowed":43.916,"dem":11255,"des":5628},{"id":"P1-0251","t":"G","c":"Supramax/Ultramax","m":"soybean","used":47.887222,"allowed":49.8825,"dem":15366,"des":7683},{"id":"P1-0252","t":"G","c":"Panamax/Kamsarmax","m":"corn","used":53.260556,"allowed":53.798571,"dem":18860,"des":9430},{"id":"P1-0253","t":"G","c":"Handysize","m":"wheat","used":26.783056,"allowed":26.003077,"dem":10254,"des":5127},{"id":"P1-0254","t":"M","c":"Handymax","m":"sugar","used":100.901944,"allowed":93.427938,"dem":10808,"des":5404},{"id":"P1-0255","t":"M","c":"Supramax/Ultramax","m":"fertiliser","used":93.700833,"allowed":81.479094,"dem":15267,"des":7634},{"id":"P1-0256","t":"G","c":"Panamax/Kamsarmax","m":"oilseeds","used":85.273611,"allowed":68.219,"dem":17392,"des":8696},{"id":"P1-0257","t":"G","c":"Handysize","m":"soybean","used":18.903889,"allowed":23.053333,"dem":9996,"des":4998},{"id":"P1-0258","t":"G","c":"Handymax","m":"corn","used":34.055278,"allowed":37.839286,"dem":13033,"des":6516},{"id":"P1-0259","t":"G","c":"Supramax/Ultramax","m":"wheat","used":34.779167,"allowed":36.228462,"dem":12040,"des":6020},{"id":"P1-0260","t":"M","c":"Panamax/Kamsarmax","m":"sugar","used":172.830556,"allowed":174.576497,"dem":15743,"des":7872},{"id":"P1-0261","t":"M","c":"Handysize","m":"fertiliser","used":49.2625,"allowed":47.827526,"dem":8485,"des":4242},{"id":"P1-0262","t":"G","c":"Handymax","m":"oilseeds","used":44.007778,"allowed":40.748,"dem":13905,"des":6952},{"id":"P1-0263","t":"G","c":"Supramax/Ultramax","m":"soybean","used":46.450278,"allowed":40.391667,"dem":13880,"des":6940},{"id":"P1-0264","t":"G","c":"Panamax/Kamsarmax","m":"corn","used":50.116944,"allowed":40.093571,"dem":19286,"des":9643},{"id":"P1-0265","t":"G","c":"Handysize","m":"wheat","used":20.116944,"allowed":24.533077,"dem":9769,"des":4884},{"id":"P1-0266","t":"M","c":"Handymax","m":"sugar","used":82.476944,"allowed":91.640798,"dem":13665,"des":6832},{"id":"P1-0267","t":"M","c":"Supramax/Ultramax","m":"fertiliser","used":97.714167,"allowed":101.785714,"dem":13703,"des":6852},{"id":"P1-0268","t":"G","c":"Panamax/Kamsarmax","m":"oilseeds","used":70.115833,"allowed":70.824,"dem":19292,"des":9646},{"id":"P1-0269","t":"G","c":"Handysize","m":"soybean","used":21.856667,"allowed":21.22,"dem":10601,"des":5300},{"id":"P1-0270","t":"G","c":"Handymax","m":"corn","used":42.716111,"allowed":39.552143,"dem":10769,"des":5384},{"id":"P1-0271","t":"G","c":"Supramax/Ultramax","m":"wheat","used":52.451389,"allowed":45.61,"dem":13549,"des":6774},{"id":"P1-0272","t":"M","c":"Panamax/Kamsarmax","m":"sugar","used":182.172778,"allowed":145.738359,"dem":18736,"des":9368},{"id":"P1-0273","t":"M","c":"Handysize","m":"fertiliser","used":45.732778,"allowed":55.771777,"dem":9774,"des":4887},{"id":"P1-0274","t":"G","c":"Handymax","m":"oilseeds","used":36.351944,"allowed":40.391,"dem":12585,"des":6292},{"id":"P1-0275","t":"G","c":"Supramax/Ultramax","m":"soybean","used":41.126389,"allowed":42.84,"dem":13041,"des":6520},{"id":"P1-0276","t":"G","c":"Panamax/Kamsarmax","m":"corn","used":40.134722,"allowed":40.54,"dem":19760,"des":9880},{"id":"P1-0277","t":"G","c":"Handysize","m":"wheat","used":22.525278,"allowed":21.869231,"dem":9453,"des":4726},{"id":"P1-0278","t":"M","c":"Handymax","m":"sugar","used":133.541667,"allowed":123.649667,"dem":10246,"des":5123},{"id":"P1-0279","t":"M","c":"Supramax/Ultramax","m":"fertiliser","used":102.584444,"allowed":89.203833,"dem":15612,"des":7806},{"id":"P1-0280","t":"G","c":"Panamax/Kamsarmax","m":"oilseeds","used":81.8975,"allowed":65.518,"dem":19533,"des":9766},{"id":"P1-0281","t":"G","c":"Handysize","m":"soybean","used":18.056944,"allowed":22.020833,"dem":10039,"des":5020},{"id":"P1-0282","t":"G","c":"Handymax","m":"corn","used":28.715278,"allowed":31.905714,"dem":10110,"des":5055},{"id":"P1-0283","t":"G","c":"Supramax/Ultramax","m":"wheat","used":45.165,"allowed":47.046923,"dem":13455,"des":6728},{"id":"P1-0284","t":"M","c":"Panamax/Kamsarmax","m":"sugar","used":121.333056,"allowed":122.558758,"dem":15140,"des":7570},{"id":"P1-0285","t":"M","c":"Handysize","m":"fertiliser","used":49.723333,"allowed":48.275261,"dem":8145,"des":4072},{"id":"P1-0286","t":"G","c":"Handymax","m":"oilseeds","used":39.122778,"allowed":36.225,"dem":13486,"des":6743},{"id":"P1-0287","t":"G","c":"Supramax/Ultramax","m":"soybean","used":49.280278,"allowed":42.8525,"dem":13899,"des":6950},{"id":"P1-0288","t":"G","c":"Panamax/Kamsarmax","m":"corn","used":62.2275,"allowed":49.782143,"dem":15519,"des":7760},{"id":"P1-0289","t":"G","c":"Handysize","m":"wheat","used":19.014722,"allowed":23.188462,"dem":9506,"des":4753},{"id":"P1-0290","t":"M","c":"Handymax","m":"sugar","used":79.243889,"allowed":88.04878,"dem":12035,"des":6018},{"id":"P1-0291","t":"M","c":"Supramax/Ultramax","m":"fertiliser","used":92.972778,"allowed":96.84669,"dem":13057,"des":6528},{"id":"P1-0292","t":"G","c":"Panamax/Kamsarmax","m":"oilseeds","used":74.076667,"allowed":74.825,"dem":15872,"des":7936},{"id":"P1-0293","t":"G","c":"Handysize","m":"soybean","used":29.722222,"allowed":28.856667,"dem":9071,"des":4536},{"id":"P1-0294","t":"G","c":"Handymax","m":"corn","used":31.536944,"allowed":29.200714,"dem":12347,"des":6174},{"id":"P1-0295","t":"G","c":"Supramax/Ultramax","m":"wheat","used":41.114444,"allowed":35.751538,"dem":15252,"des":7626},{"id":"P1-0296","t":"M","c":"Panamax/Kamsarmax","m":"sugar","used":171.408056,"allowed":137.126386,"dem":16330,"des":8165},{"id":"P1-0297","t":"M","c":"Handysize","m":"fertiliser","used":42.811667,"allowed":52.209059,"dem":9100,"des":4550},{"id":"P1-0298","t":"G","c":"Handymax","m":"oilseeds","used":36.619167,"allowed":40.688,"dem":11076,"des":5538},{"id":"P1-0299","t":"G","c":"Supramax/Ultramax","m":"soybean","used":37.381389,"allowed":38.939167,"dem":15152,"des":7576},{"id":"P1-0300","t":"G","c":"Panamax/Kamsarmax","m":"corn","used":43.991389,"allowed":44.435714,"dem":19301,"des":9650},{"id":"P1-0301","t":"G","c":"Handysize","m":"wheat","used":20.719444,"allowed":20.116154,"dem":8946,"des":4473},{"id":"P1-0302","t":"M","c":"Handymax","m":"sugar","used":87.458333,"allowed":80.980044,"dem":12662,"des":6331},{"id":"P1-0303","t":"M","c":"Supramax/Ultramax","m":"fertiliser","used":122.977778,"allowed":106.937282,"dem":15860,"des":7930},{"id":"P1-0304","t":"G","c":"Panamax/Kamsarmax","m":"oilseeds","used":80.955,"allowed":64.764,"dem":19122,"des":9561},{"id":"P1-0305","t":"G","c":"Handysize","m":"soybean","used":18.747778,"allowed":22.863333,"dem":10133,"des":5066},{"id":"P1-0306","t":"G","c":"Handymax","m":"corn","used":32.851944,"allowed":36.502143,"dem":12949,"des":6474},{"id":"P1-0307","t":"G","c":"Supramax/Ultramax","m":"wheat","used":33.878333,"allowed":35.29,"dem":12144,"des":6072},{"id":"P1-0308","t":"M","c":"Panamax/Kamsarmax","m":"sugar","used":140.443889,"allowed":141.862528,"dem":19505,"des":9752},{"id":"P1-0309","t":"M","c":"Handysize","m":"fertiliser","used":47.548611,"allowed":46.163763,"dem":8077,"des":4038},{"id":"P1-0310","t":"G","c":"Handymax","m":"oilseeds","used":38.160833,"allowed":35.334,"dem":12568,"des":6284},{"id":"P1-0311","t":"G","c":"Supramax/Ultramax","m":"soybean","used":54.3375,"allowed":47.25,"dem":12200,"des":6100},{"id":"P1-0312","t":"G","c":"Panamax/Kamsarmax","m":"corn","used":49.395556,"allowed":39.516429,"dem":16360,"des":8180},{"id":"P1-0313","t":"G","c":"Handysize","m":"wheat","used":23.369444,"allowed":28.499231,"dem":10870,"des":5435},{"id":"P1-0314","t":"M","c":"Handymax","m":"sugar","used":101.919444,"allowed":113.243902,"dem":13199,"des":6600},{"id":"P1-0315","t":"M","c":"Supramax/Ultramax","m":"fertiliser","used":84.724444,"allowed":88.254355,"dem":14437,"des":7218},{"id":"P1-0316","t":"G","c":"Panamax/Kamsarmax","m":"oilseeds","used":61.846389,"allowed":62.471,"dem":16770,"des":8385},{"id":"P1-0317","t":"G","c":"Handysize","m":"soybean","used":21.8875,"allowed":21.25,"dem":8481,"des":4240},{"id":"P1-0318","t":"G","c":"Handymax","m":"corn","used":32.42,"allowed":30.018571,"dem":11308,"des":5654},{"id":"P1-0319","t":"G","c":"Supramax/Ultramax","m":"wheat","used":54.977778,"allowed":47.806923,"dem":12760,"des":6380},{"id":"P1-0320","t":"M","c":"Panamax/Kamsarmax","m":"sugar","used":209.248889,"allowed":167.399113,"dem":17055,"des":8528},{"id":"P1-0321","t":"M","c":"Handysize","m":"fertiliser","used":36.612778,"allowed":44.649826,"dem":9856,"des":4928},{"id":"P1-0322","t":"G","c":"Handymax","m":"oilseeds","used":39.923056,"allowed":44.359,"dem":12496,"des":6248},{"id":"P1-0323","t":"G","c":"Supramax/Ultramax","m":"soybean","used":48.287222,"allowed":50.299167,"dem":15930,"des":7965},{"id":"P1-0324","t":"G","c":"Panamax/Kamsarmax","m":"corn","used":43.555,"allowed":43.995,"dem":18182,"des":9091},{"id":"P1-0325","t":"G","c":"Handysize","m":"wheat","used":20.8575,"allowed":20.25,"dem":10821,"des":5410},{"id":"P1-0326","t":"M","c":"Handymax","m":"sugar","used":103.720556,"allowed":96.037694,"dem":12398,"des":6199},{"id":"P1-0327","t":"M","c":"Supramax/Ultramax","m":"fertiliser","used":116.722778,"allowed":101.498258,"dem":12609,"des":6304},{"id":"P1-0328","t":"G","c":"Panamax/Kamsarmax","m":"oilseeds","used":82.706111,"allowed":66.165,"dem":16953,"des":8476},{"id":"P1-0329","t":"G","c":"Handysize","m":"soybean","used":25.815833,"allowed":31.4825,"dem":8444,"des":4222},{"id":"P1-0330","t":"G","c":"Handymax","m":"corn","used":36.426944,"allowed":40.474286,"dem":13099,"des":6550},{"id":"P1-0331","t":"G","c":"Supramax/Ultramax","m":"wheat","used":36.358889,"allowed":37.873846,"dem":12799,"des":6400},{"id":"P1-0332","t":"M","c":"Panamax/Kamsarmax","m":"sugar","used":163.740556,"allowed":165.394678,"dem":17407,"des":8704},{"id":"P1-0333","t":"M","c":"Handysize","m":"fertiliser","used":50.575833,"allowed":49.102787,"dem":9623,"des":4812},{"id":"P1-0334","t":"G","c":"Handymax","m":"oilseeds","used":61.981111,"allowed":57.39,"dem":11540,"des":5770},{"id":"P1-0335","t":"G","c":"Supramax/Ultramax","m":"soybean","used":53.069722,"allowed":46.1475,"dem":15502,"des":7751},{"id":"P1-0336","t":"G","c":"Panamax/Kamsarmax","m":"corn","used":69.820556,"allowed":55.856429,"dem":15997,"des":7998},{"id":"P1-0337","t":"G","c":"Handysize","m":"wheat","used":21.255,"allowed":25.920769,"dem":10060,"des":5030},{"id":"P1-0338","t":"M","c":"Handymax","m":"sugar","used":95.665556,"allowed":106.2949,"dem":11080,"des":5540},{"id":"P1-0339","t":"M","c":"Supramax/Ultramax","m":"fertiliser","used":89.778611,"allowed":93.519164,"dem":12845,"des":6422},{"id":"P1-0340","t":"G","c":"Panamax/Kamsarmax","m":"oilseeds","used":59.427778,"allowed":60.028,"dem":16737,"des":8368},{"id":"P1-0341","t":"G","c":"Handysize","m":"soybean","used":27.256389,"allowed":26.4625,"dem":10735,"des":5368},{"id":"P1-0342","t":"G","c":"Handymax","m":"corn","used":39.645278,"allowed":36.708571,"dem":12606,"des":6303},{"id":"P1-0343","t":"G","c":"Supramax/Ultramax","m":"wheat","used":50.159444,"allowed":43.616923,"dem":15157,"des":7578},{"id":"P1-0344","t":"M","c":"Panamax/Kamsarmax","m":"sugar","used":196.061667,"allowed":156.849224,"dem":15235,"des":7618},{"id":"P1-0345","t":"M","c":"Handysize","m":"fertiliser","used":36.118611,"allowed":44.047038,"dem":10378,"des":5189},{"id":"P1-0346","t":"G","c":"Handymax","m":"oilseeds","used":34.776944,"allowed":38.641,"dem":12570,"des":6285},{"id":"P1-0347","t":"G","c":"Supramax/Ultramax","m":"soybean","used":39.701389,"allowed":41.355833,"dem":13275,"des":6638},{"id":"P1-0348","t":"G","c":"Panamax/Kamsarmax","m":"corn","used":47.570833,"allowed":48.051429,"dem":16730,"des":8365},{"id":"P1-0349","t":"G","c":"Handysize","m":"wheat","used":22.189444,"allowed":21.543077,"dem":9264,"des":4632},{"id":"P1-0350","t":"M","c":"Handymax","m":"sugar","used":119.456111,"allowed":110.607539,"dem":13273,"des":6636},{"id":"P1-0351","t":"M","c":"Supramax/Ultramax","m":"fertiliser","used":104.189167,"allowed":90.599303,"dem":15692,"des":7846},{"id":"P1-0352","t":"G","c":"Panamax/Kamsarmax","m":"oilseeds","used":86.168889,"allowed":68.935,"dem":15975,"des":7988},{"id":"P1-0353","t":"G","c":"Handysize","m":"soybean","used":22.295833,"allowed":27.19,"dem":9777,"des":4888},{"id":"P1-0354","t":"G","c":"Handymax","m":"corn","used":26.503611,"allowed":29.448571,"dem":12645,"des":6322},{"id":"P1-0355","t":"G","c":"Supramax/Ultramax","m":"wheat","used":37.291667,"allowed":38.845385,"dem":14897,"des":7448},{"id":"P1-0356","t":"M","c":"Panamax/Kamsarmax","m":"sugar","used":127.940556,"allowed":129.232816,"dem":15828,"des":7914},{"id":"P1-0357","t":"M","c":"Handysize","m":"fertiliser","used":46.475556,"allowed":45.121951,"dem":9303,"des":4652},{"id":"P1-0358","t":"G","c":"Handymax","m":"oilseeds","used":61.258611,"allowed":56.721,"dem":11692,"des":5846},{"id":"P1-0359","t":"G","c":"Supramax/Ultramax","m":"soybean","used":53.696389,"allowed":46.6925,"dem":13484,"des":6742},{"id":"P1-0360","t":"G","c":"Panamax/Kamsarmax","m":"corn","used":66.428333,"allowed":53.142857,"dem":19462,"des":9731},{"id":"P1-0361","t":"G","c":"Handysize","m":"wheat","used":17.896389,"allowed":21.824615,"dem":9188,"des":4594},{"id":"P1-0362","t":"M","c":"Handymax","m":"sugar","used":82.827778,"allowed":92.031042,"dem":10146,"des":5073},{"id":"P1-0363","t":"M","c":"Supramax/Ultramax","m":"fertiliser","used":90.321944,"allowed":94.085366,"dem":15608,"des":7804},{"id":"P1-0364","t":"G","c":"Panamax/Kamsarmax","m":"oilseeds","used":75.419167,"allowed":76.181,"dem":18096,"des":9048},{"id":"P1-0365","t":"G","c":"Handysize","m":"soybean","used":31.590833,"allowed":30.670833,"dem":10514,"des":5257},{"id":"P1-0366","t":"G","c":"Handymax","m":"corn","used":35.809722,"allowed":33.157143,"dem":12717,"des":6358},{"id":"P1-0367","t":"G","c":"Supramax/Ultramax","m":"wheat","used":39.862778,"allowed":34.663077,"dem":14188,"des":7094},{"id":"P1-0368","t":"M","c":"Panamax/Kamsarmax","m":"sugar","used":217.721944,"allowed":174.177384,"dem":16183,"des":8092},{"id":"P1-0369","t":"M","c":"Handysize","m":"fertiliser","used":49.03,"allowed":59.792683,"dem":10977,"des":5488},{"id":"P1-0370","t":"G","c":"Handymax","m":"oilseeds","used":41.192222,"allowed":45.769,"dem":11863,"des":5932},{"id":"P1-0371","t":"G","c":"Supramax/Ultramax","m":"soybean","used":50.18,"allowed":52.270833,"dem":13915,"des":6958},{"id":"P1-0372","t":"G","c":"Panamax/Kamsarmax","m":"corn","used":42.376111,"allowed":42.804286,"dem":19017,"des":9508},{"id":"P1-0373","t":"G","c":"Handysize","m":"wheat","used":24.216944,"allowed":23.511538,"dem":8876,"des":4438},{"id":"P1-0374","t":"M","c":"Handymax","m":"sugar","used":104.4175,"allowed":96.682927,"dem":13096,"des":6548},{"id":"P1-0375","t":"M","c":"Supramax/Ultramax","m":"fertiliser","used":93.995556,"allowed":81.735192,"dem":14870,"des":7435},{"id":"P1-0376","t":"G","c":"Panamax/Kamsarmax","m":"oilseeds","used":71.4225,"allowed":57.138,"dem":16653,"des":8326},{"id":"P1-0377","t":"G","c":"Handysize","m":"soybean","used":25.373056,"allowed":30.9425,"dem":9367,"des":4684},{"id":"P1-0378","t":"G","c":"Handymax","m":"corn","used":30.405278,"allowed":33.783571,"dem":12642,"des":6321},{"id":"P1-0379","t":"G","c":"Supramax/Ultramax","m":"wheat","used":35.198611,"allowed":36.665385,"dem":12029,"des":6014},{"id":"P1-0380","t":"M","c":"Panamax/Kamsarmax","m":"sugar","used":156.602222,"allowed":158.184035,"dem":19348,"des":9674},{"id":"P1-0381","t":"M","c":"Handysize","m":"fertiliser","used":66.031389,"allowed":64.108014,"dem":8389,"des":4194},{"id":"P1-0382","t":"G","c":"Handymax","m":"oilseeds","used":53.273333,"allowed":49.327,"dem":13787,"des":6894},{"id":"P1-0383","t":"G","c":"Supramax/Ultramax","m":"soybean","used":49.274444,"allowed":42.8475,"dem":14156,"des":7078},{"id":"P1-0384","t":"G","c":"Panamax/Kamsarmax","m":"corn","used":64.859722,"allowed":51.887857,"dem":15459,"des":7730},{"id":"P1-0385","t":"G","c":"Handysize","m":"wheat","used":22.753611,"allowed":27.748462,"dem":9277,"des":4638},{"id":"P1-0386","t":"M","c":"Handymax","m":"sugar","used":106.8725,"allowed":118.747228,"dem":11063,"des":5532},{"id":"P1-0387","t":"M","c":"Supramax/Ultramax","m":"fertiliser","used":78.056111,"allowed":81.308362,"dem":14300,"des":7150},{"id":"P1-0388","t":"G","c":"Panamax/Kamsarmax","m":"oilseeds","used":77.663611,"allowed":78.448,"dem":15731,"des":7866},{"id":"P1-0389","t":"G","c":"Handysize","m":"soybean","used":28.398889,"allowed":27.571667,"dem":10379,"des":5190},{"id":"P1-0390","t":"G","c":"Handymax","m":"corn","used":35.735556,"allowed":33.088571,"dem":10493,"des":5246},{"id":"P1-0391","t":"G","c":"Supramax/Ultramax","m":"wheat","used":43.516111,"allowed":37.84,"dem":13995,"des":6998},{"id":"P1-0392","t":"M","c":"Panamax/Kamsarmax","m":"sugar","used":166.003333,"allowed":132.802661,"dem":17792,"des":8896},{"id":"P1-0393","t":"M","c":"Handysize","m":"fertiliser","used":42.808333,"allowed":52.205575,"dem":8576,"des":4288},{"id":"P1-0394","t":"G","c":"Handymax","m":"oilseeds","used":50.299167,"allowed":55.888,"dem":13536,"des":6768},{"id":"P1-0395","t":"G","c":"Supramax/Ultramax","m":"soybean","used":42.920833,"allowed":44.709167,"dem":14476,"des":7238},{"id":"P1-0396","t":"G","c":"Panamax/Kamsarmax","m":"corn","used":45.1075,"allowed":45.562857,"dem":19210,"des":9605},{"id":"P1-0397","t":"G","c":"Handysize","m":"wheat","used":24.378611,"allowed":23.668462,"dem":9375,"des":4688},{"id":"P1-0398","t":"M","c":"Handymax","m":"sugar","used":118.383333,"allowed":109.614191,"dem":12086,"des":6043},{"id":"P1-0399","t":"M","c":"Supramax/Ultramax","m":"fertiliser","used":94.939167,"allowed":82.555749,"dem":15244,"des":7622},{"id":"P1-0400","t":"G","c":"Panamax/Kamsarmax","m":"oilseeds","used":69.195,"allowed":55.356,"dem":17213,"des":8606},{"id":"P1-0401","t":"G","c":"Handysize","m":"soybean","used":22.718611,"allowed":27.705833,"dem":9374,"des":4687},{"id":"P1-0402","t":"G","c":"Handymax","m":"corn","used":33.19,"allowed":36.877857,"dem":13835,"des":6918},{"id":"P1-0403","t":"G","c":"Supramax/Ultramax","m":"wheat","used":44.562222,"allowed":46.419231,"dem":15585,"des":7792},{"id":"P1-0404","t":"M","c":"Panamax/Kamsarmax","m":"sugar","used":172.110556,"allowed":173.849224,"dem":18858,"des":9429},{"id":"P1-0405","t":"M","c":"Handysize","m":"fertiliser","used":60.427222,"allowed":58.667247,"dem":9026,"des":4513},{"id":"P1-0406","t":"G","c":"Handymax","m":"oilseeds","used":43.243333,"allowed":40.04,"dem":11483,"des":5742},{"id":"P1-0407","t":"G","c":"Supramax/Ultramax","m":"soybean","used":43.196111,"allowed":37.561667,"dem":12386,"des":6193},{"id":"P1-0408","t":"G","c":"Panamax/Kamsarmax","m":"corn","used":50.789167,"allowed":40.631429,"dem":19681,"des":9840},{"id":"P1-0409","t":"G","c":"Handysize","m":"wheat","used":18.813889,"allowed":22.943846,"dem":8174,"des":4087},{"id":"P1-0410","t":"M","c":"Handymax","m":"sugar","used":78.293889,"allowed":86.993348,"dem":11664,"des":5832},{"id":"P1-0411","t":"M","c":"Supramax/Ultramax","m":"fertiliser","used":84.353056,"allowed":87.867596,"dem":12436,"des":6218},{"id":"P1-0412","t":"G","c":"Panamax/Kamsarmax","m":"oilseeds","used":60.903611,"allowed":61.519,"dem":17993,"des":8996},{"id":"P1-0413","t":"G","c":"Handysize","m":"soybean","used":24.313333,"allowed":23.605,"dem":10639,"des":5320},{"id":"P1-0414","t":"G","c":"Handymax","m":"corn","used":34.448333,"allowed":31.896429,"dem":12656,"des":6328},{"id":"P1-0415","t":"G","c":"Supramax/Ultramax","m":"wheat","used":47.645278,"allowed":41.430769,"dem":12247,"des":6124},{"id":"P1-0416","t":"M","c":"Panamax/Kamsarmax","m":"sugar","used":188.916111,"allowed":151.133038,"dem":17799,"des":8900},{"id":"P1-0417","t":"M","c":"Handysize","m":"fertiliser","used":36.324444,"allowed":44.297909,"dem":8583,"des":4292},{"id":"P1-0418","t":"G","c":"Handymax","m":"oilseeds","used":51.5025,"allowed":57.225,"dem":12794,"des":6397},{"id":"P1-0419","t":"G","c":"Supramax/Ultramax","m":"soybean","used":39.723333,"allowed":41.378333,"dem":13397,"des":6698},{"id":"P1-0420","t":"G","c":"Panamax/Kamsarmax","m":"corn","used":44.713889,"allowed":45.165714,"dem":15306,"des":7653}];
+var CLASSES = ["Handysize", "Handymax", "Supramax/Ultramax", "Panamax/Kamsarmax"];
+var TERM = { G: "Grain elevator", M: "Multi-bulk" };
+var NS = "http://www.w3.org/2000/svg";
+
+// ---------- formatting
+function money(v, dp) {
+  dp = dp || 0;
+  var r = Math.abs(v).toLocaleString("en-US", { minimumFractionDigits: dp, maximumFractionDigits: dp });
+  if (Number(r.replace(/,/g, "")) === 0) return "$0";
+  return (v < 0 ? "−$" : "$") + r;
+}
+function moneyK(v) {
+  var a = Math.abs(v), s = v < 0 ? "−$" : "$";
+  if (a >= 1e6) return s + (a / 1e6).toFixed(2) + "M";
+  if (a >= 1e4) return s + Math.round(a / 1e3) + "k";
+  if (a >= 1e3) return s + (a / 1e3).toFixed(1) + "k";
+  if (Math.round(a) === 0) return "$0";
+  return s + Math.round(a);
+}
+function signed(v) { return (v > 0 ? "+" : "") + money(v); }
+function pct(v, dp) { return (v * 100).toFixed(dp === undefined ? 1 : dp) + "%"; }
+function css(name) { return "var(" + name + ")"; }
+
+// ---------- tiny SVG helper
+function el(tag, attrs, parent, text) {
+  var e = document.createElementNS(NS, tag);
+  for (var k in attrs) {
+    var v = attrs[k];
+    if ((k === "fill" || k === "stroke") && String(v).indexOf("var(") === 0) e.style.setProperty(k, v);
+    else e.setAttribute(k, v);
+  }
+  if (text !== undefined) e.textContent = text;
+  if (parent) parent.appendChild(e);
+  return e;
+}
+function newSvg(container, w, h, label) {
+  container.innerHTML = "";
+  var s = el("svg", { viewBox: "0 0 " + w + " " + h, role: "img", "aria-label": label });
+  container.appendChild(s);
+  return s;
+}
+function niceStep(range, n) {
+  var raw = range / n, mag = Math.pow(10, Math.floor(Math.log10(raw))), f = raw / mag;
+  return (f < 1.5 ? 1 : f < 2.25 ? 2 : f < 3.5 ? 2.5 : f < 7.5 ? 5 : 10) * mag;
+}
+function ticks(lo, hi, n) {
+  var st = niceStep(hi - lo, n || 6), out = [];
+  for (var t = Math.ceil(lo / st) * st; t <= hi + st * 1e-9; t += st) out.push(Math.abs(t) < st * 1e-9 ? 0 : t);
+  return out;
+}
+function scale(d0, d1, r0, r1) { return function (v) { return r0 + (v - d0) / (d1 - d0) * (r1 - r0); }; }
+
+// ---------- chart: ranked bars of every call
+function drawRank(container, rows, label) {
+  var W = 960, H = 280, L = 72, R = 16, T = 16, B = 34;
+  var s = newSvg(container, W, H, label);
+  var net = rows.map(function (r) { return r.net; }).sort(function (a, b) { return a - b; });
+  var lo = Math.min(net[0], 0), hi = Math.max(net[net.length - 1], 0);
+  var tk = ticks(lo, hi, 6);
+  var y0 = Math.min(lo, tk[0]), y1 = Math.max(hi, tk[tk.length - 1]);
+  var y = scale(y0, y1, H - B, T), bw = (W - L - R) / net.length;
+  tk.forEach(function (t) {
+    el("line", { x1: L, x2: W - R, y1: y(t), y2: y(t), stroke: css("--line"), "stroke-width": t === 0 ? 0 : 1 }, s);
+    el("text", { x: L - 8, y: y(t) + 4, "text-anchor": "end", "font-size": 12 }, s, moneyK(t));
+  });
+  var dem = css("--dem"), des = css("--des");
+  net.forEach(function (v, i) {
+    var a = y(Math.max(v, 0)), b = y(Math.min(v, 0));
+    el("rect", { x: L + i * bw, y: a, width: Math.max(bw - (bw > 3 ? 0.6 : 0), 0.8), height: Math.max(b - a, 0.6), fill: v < 0 ? dem : des }, s);
+  });
+  el("line", { x1: L, x2: W - R, y1: y(0), y2: y(0), stroke: css("--ink2"), "stroke-width": 1 }, s);
+  // worst-decile marker
+  var k = Math.ceil(net.length * 0.1);
+  if (net.length >= 20) {
+    var x = L + k * bw;
+    el("line", { x1: x, x2: x, y1: T, y2: H - B, stroke: css("--ink2"), "stroke-dasharray": "4 4" }, s);
+    el("text", { x: x + 8, y: y(y0) + 2 > H - B - 8 ? H - B - 10 : y(y0), "font-size": 12 }, s, "← worst 10% of calls");
+  }
+  el("text", { x: L, y: H - 10, "font-size": 12 }, s, "Largest cost");
+  el("text", { x: W - R, y: H - 10, "font-size": 12, "text-anchor": "end" }, s, "Largest saving →");
+  el("text", { x: (L + W - R) / 2, y: H - 10, "font-size": 12, "text-anchor": "middle" }, s, net.length + " calls, one bar each");
+}
+function decileNote(rows) {
+  var d = rows.map(function (r) { return r.dem; }).sort(function (a, b) { return b - a; });
+  var tot = d.reduce(function (a, b) { return a + b; }, 0);
+  var k = Math.ceil(rows.length * 0.1), top = d.slice(0, k).reduce(function (a, b) { return a + b; }, 0);
+  if (tot <= 0) return "No call ends in demurrage under these terms.";
+  return "The " + k + " costliest calls (10%) account for " + pct(top / tot, 0) + " of all demurrage charged.";
+}
+
+// ---------- chart: range rows (percentile bars)
+function drawRange(container, groups, opt) {
+  opt = opt || {};
+  var tails = opt.tails !== false;
+  var W = 960, L = 210, R = 24, T = 10, rowH = 40, B = 34;
+  var H = T + rowH * groups.length + B;
+  var s = newSvg(container, W, H, opt.label || "Range chart");
+  var lo = 0, hi = 0;
+  groups.forEach(function (g) {
+    var st = g.s;
+    lo = Math.min(lo, tails ? st.p5 : st.p25, st.mean);
+    hi = Math.max(hi, tails ? st.p95 : st.p75, st.mean);
+  });
+  var pad = (hi - lo) * 0.04, tk = ticks(lo - pad, hi + pad, 7);
+  var d0 = Math.min(lo - pad, tk[0]), d1 = Math.max(hi + pad, tk[tk.length - 1]);
+  var x = scale(d0, d1, L, W - R);
+  el("rect", { x: x(d0), y: T, width: x(0) - x(d0), height: rowH * groups.length, fill: css("--dem"), opacity: 0.06 }, s);
+  el("rect", { x: x(0), y: T, width: x(d1) - x(0), height: rowH * groups.length, fill: css("--des"), opacity: 0.06 }, s);
+  tk.forEach(function (t) {
+    el("line", { x1: x(t), x2: x(t), y1: T, y2: T + rowH * groups.length, stroke: t === 0 ? css("--ink2") : css("--line") }, s);
+    el("text", { x: x(t), y: H - 12, "text-anchor": "middle", "font-size": 12 }, s, moneyK(t));
+  });
+  var acc = css("--accent"), ink = css("--ink"), surf = css("--surface");
+  groups.forEach(function (g, i) {
+    var cy = T + rowH * i + rowH / 2, st = g.s;
+    if (g.all) el("line", { x1: 0, x2: W - R, y1: T + rowH * i + 0.5, y2: T + rowH * i + 0.5, stroke: css("--muted"), "stroke-dasharray": "3 3" }, s);
+    el("text", { x: 0, y: cy - 2, "font-size": 14, "font-weight": g.all ? 600 : 500, fill: ink }, s, g.label);
+    el("text", { x: 0, y: cy + 14, "font-size": 11.5 }, s, st.calls + " calls · mean " + money(st.mean));
+    if (tails) el("line", { x1: x(st.p5), x2: x(st.p95), y1: cy, y2: cy, stroke: acc, "stroke-width": 2, "stroke-linecap": "round" }, s);
+    el("rect", { x: x(st.p25), y: cy - 9, width: Math.max(x(st.p75) - x(st.p25), 2), height: 18, rx: 3, fill: acc, opacity: 0.85 }, s);
+    var m = x(st.mean);
+    el("path", { d: "M" + m + " " + (cy - 8) + "L" + (m + 8) + " " + cy + "L" + m + " " + (cy + 8) + "L" + (m - 8) + " " + cy + "Z", fill: "#e07b1f", stroke: surf, "stroke-width": 1.5 }, s);
+    el("circle", { cx: x(st.p50), cy: cy, r: 6, fill: surf, stroke: ink, "stroke-width": 2 }, s);
+  });
+}
+
+// ---------- groups
+function groupStats(rows, key, order, labelFn) {
+  var out = [];
+  order.forEach(function (v) {
+    var sub = rows.filter(function (r) { return key(r) === v; });
+    if (sub.length) out.push({ label: labelFn ? labelFn(v) : v, s: summarize(sub) });
+  });
+  out.push({ label: "All calls", s: summarize(rows), all: true });
+  return out;
+}
+
+// ---------- baseline
+var BASE = runModel(CALLS, {});
+var BS = summarize(BASE);
+
+function kpis(container, st, ref) {
+  var d = function (v, r) {
+    if (!ref) return "";
+    var diff = v - r;
+    if (Math.abs(diff) < 0.5) return '<span class="delta">same as baseline</span>';
+    return '<span class="delta ' + (diff > 0 ? "pos-t" : "neg-t") + '">' + signed(diff) + " vs baseline</span>";
+  };
+  var nDem = Math.round(st.shareDem * st.calls);
+  var tiles = [
+    { c: st.total < 0 ? "neg" : "pos", lab: "Net result, all calls", val: money(st.total), sub: ref ? d(st.total, ref.total) : "despatch earned minus demurrage paid" },
+    { c: "neg", lab: "Demurrage paid", val: money(-st.totalDem), sub: ref ? d(-st.totalDem, -ref.totalDem) : nDem + " calls over their allowance" },
+    { c: "pos", lab: "Despatch earned", val: money(st.totalDes), sub: ref ? d(st.totalDes, ref.totalDes) : (st.calls - nDem) + " calls under their allowance" },
+    { c: st.mean < 0 ? "neg" : "pos", lab: "Mean per call", val: money(st.mean), sub: "median " + money(st.p50) },
+    { c: "acc", lab: "Calls in demurrage", val: pct(st.shareDem), sub: nDem + " of " + st.calls + " calls" }
+  ];
+  container.innerHTML = tiles.map(function (t) {
+    return '<div class="tile ' + t.c + '"><span class="lab">' + t.lab + '</span><span class="val">' + t.val + '</span><span class="sub">' + t.sub + "</span></div>";
+  }).join("");
+}
+
+kpis(document.getElementById("kpiBase"), BS);
+drawRank(document.getElementById("rankBase"), BASE, "Net result of every call, ranked");
+document.getElementById("rankBaseNote").textContent = decileNote(BASE) + " Median call " + money(BS.p50) + "; mean " + money(BS.mean) + "; worst call " + money(BS.min) + ".";
+drawRange(document.getElementById("byClass"), groupStats(BASE, function (r) { return r.k.c; }, CLASSES), { label: "Net result by vessel class" });
+drawRange(document.getElementById("byTerminal"), groupStats(BASE, function (r) { return r.k.t; }, ["G", "M"], function (v) { return TERM[v]; }), { label: "Net result by terminal" });
+drawRange(document.getElementById("byCommodity"), groupStats(BASE, function (r) { return r.k.m; }, ["corn", "oilseeds", "soybean", "wheat", "fertiliser", "sugar"],
+  function (v) { return v.charAt(0).toUpperCase() + v.slice(1) + (v === "fertiliser" || v === "sugar" ? " (multi-bulk)" : " (grain)"); }), { label: "Net result by commodity" });
+
+// heatmap
+(function () {
+  var h = '<thead><tr><th class="row">Terminal</th>' + CLASSES.map(function (c) { return "<th>" + c + "</th>"; }).join("") + "</tr></thead><tbody>";
+  var maxAbs = 0, cells = {};
+  ["G", "M"].forEach(function (t) {
+    CLASSES.forEach(function (c) {
+      var sub = BASE.filter(function (r) { return r.k.t === t && r.k.c === c; });
+      var st = summarize(sub); cells[t + c] = st; maxAbs = Math.max(maxAbs, Math.abs(st.mean));
+    });
+  });
+  ["G", "M"].forEach(function (t) {
+    h += '<tr><th class="row">' + TERM[t] + "</th>";
+    CLASSES.forEach(function (c) {
+      var st = cells[t + c], share = st.total / BS.total;
+      var col = st.mean < 0 ? "var(--dem)" : "var(--des)", a = Math.round(8 + 52 * Math.sqrt(Math.abs(st.mean) / maxAbs));
+      var hot = st.total / BS.total > 0.3 ? " hot" : "";
+      h += '<td class="' + hot.trim() + '" style="background:color-mix(in srgb, ' + col + " " + a + '%, var(--surface))">' +
+        '<div class="m">' + money(st.mean) + '</div><div class="s">median ' + money(st.p50) + "</div>" +
+        '<div class="s">' + st.calls + " calls" + (st.total < 0 ? " · " + pct(share, 0) + " of net loss" : "") + "</div></td>";
+    });
+    h += "</tr>";
+  });
+  document.getElementById("heat").innerHTML = h + "</tbody>";
+})();
+
+// ---------- sensitivity
+var LEVERS = [
+  { key: "lm", name: "Allowed laytime", lo: 0.9, hi: 1.1, fmt: function (v) { return v.toFixed(2) + "×"; }, range: "0.90× to 1.10×",
+    sweep: [0.8, 1.3, 0.05], base: 1 },
+  { key: "lo", name: "Extra laytime per call", lo: -12, hi: 12, fmt: function (v) { return (v > 0 ? "+" : v < 0 ? "−" : "±") + Math.abs(v) + " h"; }, range: "−12 h to +12 h",
+    sweep: [-24, 24, 4], base: 0 },
+  { key: "drm", name: "Demurrage rate", lo: 0.9, hi: 1.1, fmt: function (v) { return v.toFixed(2) + "×"; }, range: "0.90× to 1.10×",
+    sweep: [0.8, 1.2, 0.05], base: 1 },
+  { key: "ratio", name: "Despatch rate (% of demurrage)", lo: 0, hi: 0.5, fmt: function (v) { return Math.round(v * 100) + "%"; }, range: "0% to 50%",
+    sweep: [0, 0.5, 0.05], base: 0.5 }
+];
+function totalAt(key, v) {
+  var p = {}; p[key] = (key === "ratio" && Math.abs(v - 0.5) < 1e-9) ? null : v;
+  return summarize(runModel(CALLS, p)).total;
+}
+function breakEven(key, a, b) {
+  var fa = totalAt(key, a), fb = totalAt(key, b);
+  if (fa * fb > 0) return null;
+  for (var i = 0; i < 60; i++) { var m = (a + b) / 2, fm = totalAt(key, m); if (fa * fm <= 0) { b = m; } else { a = m; fa = fm; } }
+  return (a + b) / 2;
+}
+
+(function tornado() {
+  var rows = LEVERS.map(function (L) { var a = totalAt(L.key, L.lo), b = totalAt(L.key, L.hi); return { L: L, a: a, b: b, span: Math.abs(b - a) }; })
+    .sort(function (p, q) { return q.span - p.span; });
+  var W = 960, Lw = 250, R = 30, T = 10, rowH = 52, B = 34, H = T + rowH * rows.length + B;
+  var s = newSvg(document.getElementById("tornado"), W, H, "Tornado chart of contract terms");
+  var lo = Math.min.apply(null, rows.map(function (r) { return Math.min(r.a, r.b); }).concat([BS.total, 0]));
+  var hi = Math.max.apply(null, rows.map(function (r) { return Math.max(r.a, r.b); }).concat([BS.total, 0]));
+  var pad = (hi - lo) * 0.12, tk = ticks(lo - pad, hi + pad, 7);
+  var d0 = Math.min(lo - pad, tk[0]), d1 = Math.max(hi + pad, tk[tk.length - 1]);
+  var x = scale(d0, d1, Lw, W - R);
+  tk.forEach(function (t) {
+    el("line", { x1: x(t), x2: x(t), y1: T, y2: T + rowH * rows.length, stroke: t === 0 ? css("--muted") : css("--line"), "stroke-dasharray": t === 0 ? "4 3" : "" }, s);
+    el("text", { x: x(t), y: H - 12, "text-anchor": "middle", "font-size": 12 }, s, moneyK(t));
+  });
+  el("text", { x: x(0) + 5, y: T + 12, "font-size": 11.5 }, s, "break-even");
+  rows.forEach(function (r, i) {
+    var cy = T + rowH * i + rowH / 2;
+    el("text", { x: 0, y: cy - 3, "font-size": 14, "font-weight": 500, fill: css("--ink") }, s, r.L.name);
+    el("text", { x: 0, y: cy + 14, "font-size": 11.5 }, s, r.L.range);
+    [[r.a, r.L.lo], [r.b, r.L.hi]].forEach(function (pair) {
+      var v = pair[0], better = v > BS.total;
+      var x0 = Math.min(x(v), x(BS.total)), w = Math.abs(x(v) - x(BS.total));
+      el("rect", { x: x0, y: cy - 13, width: Math.max(w, 1), height: 26, rx: 3, fill: better ? css("--des") : css("--dem"), opacity: 0.85 }, s);
+      var right = v >= BS.total;
+      el("text", { x: right ? x(v) + 6 : x(v) - 6, y: cy + 4, "font-size": 12, "text-anchor": right ? "start" : "end", fill: css("--ink") }, s,
+        moneyK(v) + " at " + r.L.fmt(pair[1]));
+    });
+  });
+  el("line", { x1: x(BS.total), x2: x(BS.total), y1: T - 4, y2: T + rowH * rows.length, stroke: css("--ink"), "stroke-width": 1.5 }, s);
+})();
+
+(function sweeps() {
+  var box = document.getElementById("sweeps");
+  LEVERS.forEach(function (L) {
+    var xs = [];
+    for (var v = L.sweep[0]; v <= L.sweep[1] + 1e-9; v += L.sweep[2]) xs.push(Math.round(v * 1000) / 1000);
+    var ys = xs.map(function (v) { return totalAt(L.key, v); });
+    var be = breakEven(L.key, L.sweep[0], L.sweep[1]);
+    var card = document.createElement("div"); card.className = "card";
+    var title = document.createElement("h3"); title.textContent = L.name; card.appendChild(title);
+    var c = document.createElement("div"); c.className = "chart"; card.appendChild(c);
+    var note = document.createElement("p"); note.className = "note";
+    if (be !== null) {
+      note.textContent = "Break-even at " + (L.key === "lo" ? "+" + be.toFixed(1) + " h per call" : be.toFixed(3) + "× (" + pct(be - 1) + " more laytime)") + ".";
+    } else {
+      var d = ys[ys.length - 1] - ys[0];
+      note.textContent = "Across this range the total moves by " + money(Math.abs(d)) + ". It never reaches break-even.";
+    }
+    card.appendChild(note); box.appendChild(card);
+
+    var W = 520, H = 270, Lp = 72, R = 18, T = 14, B = 40;
+    var s = newSvg(c, W, H, L.name + " sweep");
+    s.style.minWidth = "0";
+    var lo = Math.min.apply(null, ys.concat([0])), hi = Math.max.apply(null, ys.concat([0]));
+    var tk = ticks(lo, hi, 5), y0 = Math.min(lo, tk[0]), y1 = Math.max(hi, tk[tk.length - 1]);
+    var y = scale(y0, y1, H - B, T), x = scale(xs[0], xs[xs.length - 1], Lp, W - R);
+    el("rect", { x: Lp, y: y(0), width: W - R - Lp, height: y(y0) - y(0), fill: css("--dem"), opacity: 0.06 }, s);
+    el("rect", { x: Lp, y: y(y1), width: W - R - Lp, height: y(0) - y(y1), fill: css("--des"), opacity: 0.06 }, s);
+    tk.forEach(function (t) {
+      el("line", { x1: Lp, x2: W - R, y1: y(t), y2: y(t), stroke: t === 0 ? css("--ink2") : css("--line") }, s);
+      el("text", { x: Lp - 6, y: y(t) + 4, "text-anchor": "end", "font-size": 13 }, s, moneyK(t));
+    });
+    var step = Math.max(1, Math.round(xs.length / 6));
+    xs.forEach(function (v, i) {
+      if (i % step === 0 || i === xs.length - 1) el("text", { x: x(v), y: H - B + 18, "text-anchor": "middle", "font-size": 13 }, s, L.fmt(v));
+    });
+    el("polyline", { points: xs.map(function (v, i) { return x(v) + "," + y(ys[i]); }).join(" "), fill: "none", stroke: css("--accent"), "stroke-width": 2.5, "stroke-linejoin": "round" }, s);
+    el("circle", { cx: x(L.base), cy: y(BS.total), r: 5.5, fill: css("--surface"), stroke: css("--ink"), "stroke-width": 2 }, s);
+    el("text", { x: x(L.base) + (L.key === "ratio" ? -9 : 9), y: y(BS.total) + (L.key === "drm" ? -10 : 18), "font-size": 11.5, "text-anchor": L.key === "ratio" ? "end" : "start", fill: css("--ink") }, s, "baseline");
+    if (be !== null) {
+      el("line", { x1: x(be), x2: x(be), y1: T, y2: H - B, stroke: css("--des"), "stroke-dasharray": "4 3", "stroke-width": 1.5 }, s);
+      el("circle", { cx: x(be), cy: y(0), r: 4.5, fill: css("--des") }, s);
+    }
+    el("text", { x: (Lp + W - R) / 2, y: H - 6, "text-anchor": "middle", "font-size": 11.5 }, s, "Total net result, all 420 calls");
+  });
+})();
+
+var BE_LM = breakEven("lm", 1, 1.3), BE_LO = breakEven("lo", 0, 24);
+var SCEN = [
+  { name: "Baseline (contract as supplied)", p: {} },
+  { name: "Laytime +10%", p: { lm: 1.1 } },
+  { name: "Laytime −10%", p: { lm: 0.9 } },
+  { name: "Break-even laytime (+" + pct(BE_LM - 1) + ")", p: { lm: BE_LM } },
+  { name: "+12 h laytime per call", p: { lo: 12 } },
+  { name: "Demurrage rate +20%", p: { drm: 1.2 } },
+  { name: "Demurrage rate −20%", p: { drm: 0.8 } },
+  { name: "No despatch clause", p: { ratio: 0 } },
+  { name: "Laytime −10% and rate +20%", p: { lm: 0.9, drm: 1.2 } }
+];
+(function () {
+  var h = "<thead><tr><th>Scenario</th><th>Total net result</th><th>Change vs baseline</th><th>Mean per call</th><th>P5 per call</th><th>Calls in demurrage</th></tr></thead><tbody>";
+  SCEN.forEach(function (sc, i) {
+    var st = summarize(runModel(CALLS, sc.p)), d = st.total - BS.total;
+    h += '<tr class="' + (i === 0 ? "base" : "") + '"><td>' + sc.name + '</td><td class="' + (st.total < 0 ? "neg-t" : "pos-t") + '">' + money(st.total) + "</td><td>" +
+      (i === 0 ? "–" : '<span class="' + (d > 0 ? "pos-t" : "neg-t") + '">' + signed(d) + "</span>") + "</td><td>" + money(st.mean) + "</td><td>" + money(st.p5) + "</td><td>" + pct(st.shareDem) + "</td></tr>";
+  });
+  document.getElementById("scenarios").innerHTML = h + "</tbody>";
+})();
+
+// ---------- what-if panel
+var ids = ["lm", "lo", "drm", "ratio", "fTerm", "fClass"];
+var $ = function (id) { return document.getElementById(id); };
+function params() {
+  var r = Number($("ratio").value);
+  return { lm: Number($("lm").value), lo: Number($("lo").value), drm: Number($("drm").value),
+    ratio: Math.abs(r - 0.5) < 1e-9 ? null : r, terminal: $("fTerm").value, vclass: $("fClass").value };
+}
+var lastRows = [];
+function update() {
+  var p = params();
+  $("lmOut").textContent = p.lm.toFixed(2) + "×";
+  $("loOut").textContent = (p.lo > 0 ? "+" : p.lo < 0 ? "−" : "±") + Math.abs(p.lo) + " h";
+  $("drmOut").textContent = p.drm.toFixed(2) + "×";
+  $("ratioOut").textContent = Math.round(Number($("ratio").value) * 100) + "%" + (p.ratio === null ? " \u00b7 contract" : "");
+  var rows = runModel(CALLS, p);
+  var ref = summarize(runModel(CALLS, { terminal: p.terminal, vclass: p.vclass }));
+  var st = summarize(rows);
+  lastRows = rows;
+  kpis($("kpiWhat"), st, ref);
+  drawRank($("rankWhat"), rows, "Net result of every call under the chosen terms");
+  $("rankWhatNote").textContent = decileNote(rows) + " Median call " + money(st.p50) + "; worst call " + money(st.min) + ".";
+  drawRange($("classWhat"), groupStats(rows, function (r) { return r.k.c; }, CLASSES), { label: "Net result by vessel class, chosen terms" });
+}
+function setAll(v) {
+  $("lm").value = v.lm === undefined ? 1 : v.lm; $("lo").value = v.lo || 0; $("drm").value = v.drm || 1;
+  $("ratio").value = v.ratio === undefined ? 0.5 : v.ratio; update();
+}
+var PRESETS = [
+  { name: "Laytime +10%", v: { lm: 1.1 } },
+  { name: "Break-even laytime", v: { lm: Math.round(BE_LM * 100) / 100 } },
+  { name: "No despatch", v: { ratio: 0 } },
+  { name: "Rates +20%", v: { drm: 1.2 } },
+  { name: "Tight laytime −10%", v: { lm: 0.9 } }
+];
+PRESETS.forEach(function (pr) {
+  var b = document.createElement("button"); b.type = "button"; b.textContent = pr.name;
+  b.addEventListener("click", function () { setAll(pr.v); });
+  $("presets").appendChild(b);
+});
+ids.forEach(function (id) { $(id).addEventListener("input", update); });
+$("reset").addEventListener("click", function () { $("fTerm").value = "all"; $("fClass").value = "all"; setAll({}); });
+$("copy").addEventListener("click", function () {
+  var lines = ["call_id,terminal,vessel_class,commodity,counted_laytime_hours,allowed_laytime_hours,outcome,demurrage_usd,despatch_usd,net_charterer_usd"];
+  var p = params();
+  lastRows.forEach(function (r) {
+    var allowed = Math.max(r.k.allowed * p.lm + p.lo, 0);
+    lines.push([r.k.id, TERM[r.k.t], r.k.c, r.k.m, r.k.used.toFixed(4), allowed.toFixed(4), r.isDem ? "demurrage" : "despatch",
+      r.dem.toFixed(2), r.des.toFixed(2), r.net.toFixed(2)].join(","));
+  });
+  var msg = $("copied");
+  try {
+    navigator.clipboard.writeText(lines.join("\n")).then(function () { msg.textContent = "Copied " + lastRows.length + " rows. Paste into Excel or a text file."; },
+      function () { msg.textContent = "Copying was blocked by the browser."; });
+  } catch (e) { msg.textContent = "Copying is not available in this browser."; }
+});
+update();
+
+// ---------- tabs (one section per tab, routed on the URL hash)
+(function () {
+  var secs = Array.prototype.slice.call(document.querySelectorAll("section.block"));
+  var links = Array.prototype.slice.call(document.querySelectorAll("nav.sections a"));
+  var names = {};
+  links.forEach(function (a) { names[a.getAttribute("href").slice(1)] = a.textContent; });
+  secs.forEach(function (sec, i) {
+    var pager = document.createElement("div"); pager.className = "pager";
+    var prev = secs[i - 1], next = secs[i + 1];
+    if (prev) pager.innerHTML += '<a class="prev" href="#' + prev.id + '"><span>Previous</span>← ' + names[prev.id] + "</a>";
+    if (next) pager.innerHTML += '<a class="next" href="#' + next.id + '"><span>Next</span>' + names[next.id] + " →</a>";
+    sec.appendChild(pager);
+  });
+  function show(scrollTop) {
+    var id = (location.hash || "").slice(1);
+    if (!document.getElementById(id) || !names[id]) id = "overview";
+    secs.forEach(function (sec) { sec.classList.toggle("active", sec.id === id); });
+    links.forEach(function (a) {
+      if (a.getAttribute("href") === "#" + id) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
+    });
+    var cur = links.filter(function (a) { return a.getAttribute("href") === "#" + id; })[0];
+    if (cur && cur.scrollIntoView) cur.scrollIntoView({ block: "nearest", inline: "nearest" });
+    if (scrollTop) window.scrollTo(0, 0);
+  }
+  window.addEventListener("hashchange", function () { show(true); });
+  show(false);
+})();
+</script>
+</body>
+</html>
