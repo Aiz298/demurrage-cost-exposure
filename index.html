@@ -108,7 +108,19 @@ section.block { padding: 44px 0 8px; }
 .step { position: relative; padding-left: 58px; }
 .step .n { position: absolute; left: 20px; top: 18px; font: 700 1.6rem/1 var(--f-display); color: var(--accent); }
 .step h3 { text-wrap: pretty; }
+/* line up the paragraphs: each card shares the same heading row height */
+.steps { grid-auto-rows: auto; }
+.steps .step { grid-row: span 2; grid-template-rows: subgrid; row-gap: 14px; }
 .step p { font-size: 0.95rem; color: var(--ink2); }
+/* demurrage vs despatch explainer */
+.dd { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 14px; }
+.dd > div { border: 1px solid var(--line); border-left: 4px solid var(--line); border-radius: 0 8px 8px 0; padding: 12px 16px; display: grid; gap: 4px; }
+.dd .dem { border-left-color: var(--dem); background: color-mix(in srgb, var(--dem) 6%, var(--surface)); }
+.dd .des { border-left-color: var(--des); background: color-mix(in srgb, var(--des) 6%, var(--surface)); }
+.dd .t { font: 600 1rem/1.3 var(--f-display); }
+.dd .dem .t { color: var(--dem); } .dd .des .t { color: var(--des); }
+.dd p { font-size: 0.95rem; }
+.eg { font-size: 0.9rem; color: var(--ink2); }
 .ov-note { font-size: 0.88rem; color: var(--muted); }
 #kpiBase .tile .val { font-size: clamp(1.25rem, 1.9vw, 1.55rem); }
 .datanote { font-size: 0.85rem; color: var(--muted); border-top: 1px solid var(--line); padding-top: 14px; }
@@ -260,8 +272,7 @@ footer p { max-width: none; }
 
     <!-- Purpose of the page -->
     <div class="finding">
-      <p>This page presents our cost-exposure model for demurrage and despatch. It shows what the supplied contract terms cost the charterer across all 420 calls, and how that cost is spread across calls, terminals and vessel classes. It also tests how the total changes when contract terms (Allowed laytime, Demurrage rate) are adjusted.</p>  
-      <p>The interactive what-if model lets you try your own terms and see the result across every call.</p>
+      <p><strong>What this page is for.</strong> This page presents our cost-exposure model for demurrage and despatch. It shows what the supplied contract terms cost the charterer across all 420 calls, and how that cost is spread across calls, terminals and vessel classes. It also tests how the total changes when contract terms such as allowed laytime and the demurrage rate are adjusted. The interactive what-if model lets you try your own terms and see the result across every call straight away.</p>
     </div>
 
     <!-- Project background -->
@@ -271,19 +282,31 @@ footer p { max-width: none; }
         <span><strong>Client:</strong> Cargill Ocean Transportation</span>
         <span><strong>Course:</strong> 40.318 Supply Chain Digitalisation and Design, Industrial Project 8</span>
       </div>
-      <p>AIS tracking makes port dwell time publicly visible. However, its commercial cost depends on the charter party's laytime contract terms, which are private to the parties involved. There is no open method for estimating demurrage exposure at voyage-planning time that combines observed delay patterns with structured contract terms.</p>
-      <p>A chartering team choosing between port calls, or a shipper negotiating laytime terms, needs more than a single cost estimate. It needs a distribution range of likely outcomes that reflects how much dwell time varies.</p>
+      <p>When a ship is chartered, the contract (the charter party) gives the charterer a set amount of time at port to load or unload the cargo. This is the <strong>allowed laytime</strong>, worked out from the cargo quantity and the agreed handling rate. How long the ship actually takes, compared with that allowance, decides who pays whom.</p>
+      <div class="dd">
+        <div class="dem">
+          <span class="t">Slower than allowed: demurrage</span>
+          <p>If cargo work takes longer than the allowed laytime, the charterer pays the ship owner <strong>demurrage</strong> for every extra day, at the daily demurrage rate in the contract.</p>
+        </div>
+        <div class="des">
+          <span class="t">Faster than allowed: despatch</span>
+          <p>If cargo work finishes early, the ship owner pays the charterer <strong>despatch</strong> for every day saved, at 50% of the daily demurrage rate.</p>
+        </div>
+      </div>
+      <p class="eg"><strong>Example:</strong> with 4 days of allowed laytime and a demurrage rate of $15,000 per day, finishing in 5 days costs the charterer $15,000, while finishing in 3 days earns the charterer $7,500.</p>
+      <p>AIS tracking makes port dwell time publicly visible. Its commercial cost, though, depends on the charter party's laytime terms, and those are private to the parties involved. There is no open method for estimating demurrage exposure at voyage-planning time that combines observed delay patterns with structured contract terms.</p>
+      <p>A chartering team choosing between port calls, or a shipper negotiating laytime terms, needs more than a single cost estimate. It needs a <strong>distribution range of likely outcomes that reflects how much dwell time varies.</strong></p>
     </div>
 
     <!-- Project scope -->
     <div class="ov-sub">What we did</div>
-    <div class="grid3">
+    <div class="grid3 steps">
       <div class="card step"><span class="n">1</span>
         <h3>Calculated laytime for every call</h3>
         <p>We joined port calls, laytime terms and delay events, then applied the supplied laytime rules to get demurrage or despatch for each call.</p>
       </div>
       <div class="card step"><span class="n">2</span>
-        <h3>Checked against benchmark</h3>
+        <h3>Checked it against the benchmark</h3>
         <p>We reconciled our results with Cargill's 20-call benchmark before building anything further.</p>
       </div>
       <div class="card step"><span class="n">3</span>
