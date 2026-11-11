@@ -99,6 +99,15 @@ section.block { padding: 44px 0 8px; }
 .finding { border-left: 4px solid var(--accent); background: var(--accent-soft); padding: 16px 20px; border-radius: 0 10px 10px 0; font-size: 1.05rem; }
 .finding p { max-width: 80ch; }
 
+/* Overview: purpose, background, scope steps, data note */
+.ov-sub { font: 600 1.05rem/1.3 var(--f-display); color: var(--ink2); margin: 6px 0 -8px; }
+.meta { display: flex; flex-wrap: wrap; gap: 6px 22px; font-size: 0.9rem; color: var(--ink2); }
+.meta strong { color: var(--ink); font-weight: 600; }
+.step { position: relative; padding-left: 58px; }
+.step .n { position: absolute; left: 20px; top: 18px; font: 700 1.6rem/1 var(--f-display); color: var(--accent); }
+.step p { font-size: 0.95rem; color: var(--ink2); }
+.datanote { font-size: 0.85rem; color: var(--muted); border-top: 1px solid var(--line); padding-top: 14px; max-width: 90ch; }
+
 table.data { border-collapse: collapse; width: 100%; font-size: 0.92rem; font-variant-numeric: tabular-nums; }
 table.data th, table.data td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: right; }
 table.data th { font-weight: 600; color: var(--ink2); font-size: 0.82rem; }
@@ -240,13 +249,51 @@ footer p { max-width: none; }
 <section class="block" id="overview">
   <div class="sec-head">
     <div class="kicker">Overview</div>
-    <h2>The charterer lost about $1.06 million net across 420 calls</h2>
+    <h2>Demurrage cost exposure across 420 dry-bulk port calls</h2>
   </div>
   <div class="stack">
-    <div class="tiles" id="kpiBase"></div>
+
+    <!-- Purpose of the page -->
     <div class="finding">
-      <p><strong>Main finding.</strong> Demurrage happens about as often everywhere: close to half of the calls in every terminal and vessel class. What changes is how much it costs when it happens. Large vessels carry most of the cost, and Panamax/Kamsarmax calls at the multi-bulk terminal alone account for <strong>47% of the net loss</strong> from 8% of the calls.</p>
+      <p><strong>What this page is for.</strong> This page presents our cost-exposure model for demurrage and despatch. It shows what the supplied contract terms cost the charterer across all 420 calls, and how that cost is spread across calls, terminals and vessel classes. It also tests how the total changes when contract terms such as allowed laytime and the demurrage rate are adjusted. The interactive what-if model lets you try your own terms and see the result across every call straight away.</p>
     </div>
+
+    <!-- Project background -->
+    <div class="card">
+      <h3>Project background</h3>
+      <div class="meta">
+        <span><strong>Client:</strong> Cargill Ocean Transportation</span>
+        <span><strong>Course:</strong> 40.318 Supply Chain Digitalisation and Design, Industrial Project 8</span>
+      </div>
+      <p>AIS tracking makes port dwell time publicly visible. Its commercial cost, though, depends on the charter party's laytime terms, and those are private to the parties involved. There is no open method for estimating demurrage exposure at voyage-planning time that combines observed delay patterns with structured contract terms.</p>
+      <p>A chartering team choosing between port calls, or a shipper negotiating laytime terms, needs more than a single cost estimate. It needs a range of likely outcomes that reflects how much dwell time varies.</p>
+    </div>
+
+    <!-- Project scope -->
+    <div class="ov-sub">What we did</div>
+    <div class="grid3">
+      <div class="card step"><span class="n">1</span>
+        <h3>Calculated laytime for every call</h3>
+        <p>We joined port calls, laytime terms and delay events, then applied the supplied laytime rules to get demurrage or despatch for each call.</p>
+      </div>
+      <div class="card step"><span class="n">2</span>
+        <h3>Checked it against the benchmark</h3>
+        <p>We reconciled our results with Cargill's 20-call benchmark before building anything further.</p>
+      </div>
+      <div class="card step"><span class="n">3</span>
+        <h3>Built the cost-exposure model</h3>
+        <p>We produced a distribution of outcomes with percentiles and ran sensitivity analysis on the contract terms.</p>
+      </div>
+    </div>
+
+    <!-- Financial summary -->
+    <div class="ov-sub">Financial summary: contract terms as supplied</div>
+    <div class="tiles" id="kpiBase"></div>
+    <p class="note" style="font-size:0.88rem;color:var(--muted)">All figures are from the charterer's side, in US dollars. Negative means demurrage cost and positive means despatch saving.</p>
+
+    <!-- Data note -->
+    <p class="datanote">Cargill supplied a curated coursework data pack covering two aggregate terminal pools in Barcelona during 2024. The records are modelled, not real company transactions, and the laytime rules are deliberately simplified. The results show the method and should not be used for real claims or contracting.</p>
+
   </div>
 </section>
 
