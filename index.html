@@ -78,6 +78,7 @@ section.block.active { display: block; }
 .pager a.next { margin-left: auto; text-align: right; }
 
 section.block { padding: 44px 0 8px; }
+.subsec { margin-top: 56px; padding-top: 40px; border-top: 1px solid var(--line); }
 .sec-head { display: grid; gap: 10px; margin-bottom: 26px; }
 .sec-head .kicker { color: var(--muted); }
 .stack { display: grid; gap: 22px; }
@@ -182,7 +183,21 @@ details.more .inner { display: grid; gap: 14px; }
 .slider { display: grid; gap: 8px; }
 .slider .head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
 .slider .head label { font: 600 1.15rem/1.2 var(--f-body); }
-.slider .head output { font: 700 1.75rem/1 var(--f-display); font-variant-numeric: tabular-nums; }
+.slider .head { align-items: flex-end; }
+.lab-wrap { display: grid; gap: 6px; }
+.unit-seg { display: inline-flex; gap: 2px; padding: 2px; background: var(--bg); border: 1px solid var(--line); border-radius: 7px; width: max-content; }
+.unit-seg button { border: 0; background: transparent; padding: 3px 10px; border-radius: 5px; font-size: 0.8rem; color: var(--ink2); }
+.unit-seg button[aria-pressed="true"] { background: var(--accent); color: var(--surface); }
+.val-wrap { display: inline-flex; align-items: baseline; gap: 2px; font: 700 1.75rem/1 var(--f-display); font-variant-numeric: tabular-nums; }
+.val-in { font: inherit; color: var(--ink); width: 5.2ch; text-align: right; border: 0; border-bottom: 2px dashed var(--line); background: transparent;
+  padding: 0 2px; border-radius: 0; cursor: text; }
+.val-in:hover { border-bottom-color: var(--accent); }
+.val-in:focus { outline: none; border-bottom: 2px solid var(--accent); background: var(--accent-soft); }
+.val-unit, .val-pre { font-size: 1.15rem; color: var(--ink2); }
+.val-pre[hidden] { display: none; }
+.hint-note { font-size: 0.8rem; color: var(--muted); }
+.val-err { font-size: 0.82rem; color: var(--dem); min-height: 0; }
+.val-err:empty { display: none; }
 .slider .scale { display: flex; justify-content: space-between; gap: 8px; font-size: 0.86rem; color: var(--ink2); font-variant-numeric: tabular-nums; }
 .slider .scale .avg { text-align: center; }
 input[type="range"].big { -webkit-appearance: none; appearance: none; width: 100%; height: 12px; border-radius: 999px;
@@ -254,7 +269,7 @@ footer p { max-width: none; }
   <div class="wrap">
     <div class="kicker">SCDD industry project 8 · laytime and demurrage</div>
     <h1>Demurrage Cost Exposure</h1>
-    <p class="lede">How much the charterer paid in demurrage, and earned back in despatch, across 420 bulk-carrier port calls at two terminals in 2024. The Sensitivity and What-if tabs test how that cost changes with the contract terms.</p>
+    <p class="lede">How much the charterer paid in demurrage, and earned back in despatch, across 420 bulk-carrier port calls at two terminals in 2024. The Key results and Interactive model tabs show how that cost changes with the contract terms.</p>
     <div class="convention" aria-label="Sign convention">
       <span>Everything is shown from the <strong>charterer's</strong> side:</span>
       <span class="chip"><span class="sw dem"></span>negative = demurrage cost</span>
@@ -267,9 +282,8 @@ footer p { max-width: none; }
   <div class="wrap">
     <a href="#overview">Overview</a>
     <a href="#method">Data and method</a>
-    <a href="#results">Baseline results</a>
-    <a href="#sensitivity">Sensitivity</a>
-    <a href="#whatif">What-if model</a>
+    <a href="#interactive">Interactive model</a>
+    <a href="#results">Key results</a>
     <a href="#insights">Insights</a>
     <a href="#limitations">Limitations</a>
   </div>
@@ -288,7 +302,7 @@ footer p { max-width: none; }
     <!-- Purpose of the page -->
     <div class="finding">
       <p> This page presents our cost-exposure model for demurrage and despatch. It shows what the supplied contract terms cost the charterer across all 420 calls, and how that cost is spread across calls, terminals and vessel classes. It also tests how the total changes when contract terms such as allowed laytime and the demurrage rate are adjusted.</p> 
-      <p>The interactive what-if model lets you try your own terms and see the result across every call straight away.</p>
+      <p>The interactive model lets you try your own terms and see the result across every call straight away.</p>
     </div>
 
     <!-- Project background -->
@@ -401,97 +415,8 @@ footer p { max-width: none; }
   </div>
 </section>
 
-<!-- ============================== RESULTS -->
-<section class="block" id="results">
-  <div class="sec-head">
-    <div class="kicker">Baseline results · contract terms as supplied</div>
-    <h2>A minority of expensive calls drives the loss</h2>
-    <p>The typical call ends close to even: the median is slightly positive. The mean is negative because a small number of calls run far over their allowance.</p>
-  </div>
-  <div class="stack">
-    <div class="card">
-      <h3>Every call, ranked from largest demurrage cost to largest despatch saving</h3>
-      <div class="chart" id="rankBase"></div>
-      <p class="note" id="rankBaseNote"></p>
-    </div>
-
-    <div class="card" id="breakdown">
-      <div class="bd-head">
-        <h3>Breakdown of the net result per call</h3>
-        <div class="seg" role="tablist" aria-label="Choose a breakdown">
-          <button type="button" role="tab" data-v="class" aria-selected="true">Vessel class</button>
-          <button type="button" role="tab" data-v="term" aria-selected="false">Terminal</button>
-          <button type="button" role="tab" data-v="cross" aria-selected="false">Terminal &times; vessel class</button>
-          <button type="button" role="tab" data-v="comm" aria-selected="false">Commodity</button>
-        </div>
-      </div>
-
-      <div class="bd-panel" data-v="class" role="tabpanel">
-        <p class="bd-title">Cost rises steadily with vessel size</p>
-        <div class="legend">
-          <span class="k"><span class="lg-line"></span>P5 to P95</span>
-          <span class="k"><span class="lg-bar"></span>middle half of calls (P25 to P75)</span>
-          <span class="k"><span class="lg-med"></span>median</span>
-          <span class="k"><span class="lg-mean"></span>mean</span>
-        </div>
-        <div class="chart" id="byClass"></div>
-        <p class="note">105 calls per class. Panamax/Kamsarmax calls account for 78% of the total net loss.</p>
-      </div>
-
-      <div class="bd-panel" data-v="term" role="tabpanel" hidden>
-        <p class="bd-title">Grain elevator against multi-bulk terminal</p>
-        <div class="legend">
-          <span class="k"><span class="lg-line"></span>P5 to P95</span>
-          <span class="k"><span class="lg-bar"></span>middle half of calls (P25 to P75)</span>
-          <span class="k"><span class="lg-med"></span>median</span>
-          <span class="k"><span class="lg-mean"></span>mean</span>
-        </div>
-        <div class="chart" id="byTerminal"></div>
-        <p class="note">280 calls at the grain elevator, 140 at the multi-bulk terminal. The multi-bulk terminal's agreed handling rates are much lower (about 12,300 t/day against 29,400), so its vessels are allowed more laytime for the same cargo.</p>
-      </div>
-
-      <div class="bd-panel" data-v="cross" role="tabpanel" hidden>
-        <p class="bd-title">The hotspot: mean net result per call</p>
-        <p>The size effect appears at both terminals but is far stronger at the multi-bulk terminal.</p>
-        <div class="scroll"><table class="heat" id="heat"></table></div>
-        <p class="note">Each cell holds 35 calls (multi-bulk) or 70 calls (grain elevator), so differences between cells are indicative rather than conclusive. Only means and medians are shown here because the tails of such small groups are unreliable.</p>
-      </div>
-
-      <div class="bd-panel" data-v="comm" role="tabpanel" hidden>
-        <p class="bd-title">By commodity (read with care)</p>
-        <p>Each commodity is handled at only one terminal and carried by only two vessel classes, so commodity differences cannot be separated from terminal and vessel-size effects. Sugar, for example, arrives on Handymax and Panamax/Kamsarmax vessels at the multi-bulk terminal only.</p>
-        <div class="legend">
-          <span class="k"><span class="lg-line"></span>P5 to P95</span>
-          <span class="k"><span class="lg-bar"></span>middle half of calls (P25 to P75)</span>
-          <span class="k"><span class="lg-med"></span>median</span>
-          <span class="k"><span class="lg-mean"></span>mean</span>
-        </div>
-        <div class="chart" id="byCommodity"></div>
-      </div>
-    </div>
-  </div>
-</section>
-
-<!-- ============================== SENSITIVITY -->
-<section class="block" id="sensitivity">
-  <div class="sec-head">
-    <div class="kicker">Sensitivity analysis</div>
-    <h2>Allowed laytime matters about ten times more than the demurrage rate</h2>
-    <p>Each contract term is moved on its own while the others stay at their supplied values. The time each vessel actually used is held fixed.</p>
-  </div>
-  <div class="stack">
-    <div class="card">
-      <h3>Which term moves the total most</h3>
-      <div class="chart" id="tornado"></div>
-      <p class="note">Bars show the total net result for all 420 calls at the low and high end of each range. The centre line is the baseline (−$1,058,507).</p>
-    </div>
-
-    <div class="sweeps" id="sweeps"></div>
-  </div>
-</section>
-
-<!-- ============================== WHAT-IF -->
-<section class="block" id="whatif">
+<!-- ============================== INTERACTIVE MODEL -->
+<section class="block" id="interactive">
   <div class="sec-head">
     <div class="kicker">Interactive model</div>
     <h2>Try your own contract terms</h2>
@@ -501,16 +426,34 @@ footer p { max-width: none; }
     <div class="card wi-controls">
       <div class="stack" style="gap:20px">
         <div class="panel-lab">Contract terms</div>
-        <div class="slider">
-          <div class="head"><label for="lm">Allowed laytime</label><output id="lmOut" for="lm"></output></div>
-          <input class="big" type="range" id="lm" min="80" max="120" step="1" value="100">
-          <div class="scale"><span>80%</span><span class="avg" id="lmAvg"></span><span>120%</span></div>
+        <div class="slider" data-term="lm">
+          <div class="head">
+            <div class="lab-wrap"><label for="lmVal">Allowed laytime</label>
+              <div class="unit-seg" role="group" aria-label="Allowed laytime units">
+                <button type="button" data-u="pct" aria-pressed="true">%</button>
+                <button type="button" data-u="abs" aria-pressed="false">hours</button>
+              </div>
+            </div>
+            <div class="val-wrap"><input class="val-in" id="lmVal" type="text" inputmode="decimal" autocomplete="off" aria-describedby="lmAvg"><span class="val-unit" id="lmUnit">%</span></div>
+          </div>
+          <input class="big" type="range" id="lm" min="80" max="120" step="1" value="100" aria-label="Allowed laytime slider">
+          <div class="scale"><span id="lmMin">80%</span><span class="avg" id="lmAvg"></span><span id="lmMax">120%</span></div>
         </div>
-        <div class="slider">
-          <div class="head"><label for="drm">Demurrage rate</label><output id="drmOut" for="drm"></output></div>
-          <input class="big" type="range" id="drm" min="80" max="120" step="1" value="100">
-          <div class="scale"><span>80%</span><span class="avg" id="drmAvg"></span><span>120%</span></div>
+        <div class="slider" data-term="drm">
+          <div class="head">
+            <div class="lab-wrap"><label for="drmVal">Demurrage rate</label>
+              <div class="unit-seg" role="group" aria-label="Demurrage rate units">
+                <button type="button" data-u="pct" aria-pressed="true">%</button>
+                <button type="button" data-u="abs" aria-pressed="false">$ per hour</button>
+              </div>
+            </div>
+            <div class="val-wrap"><span class="val-pre" id="drmPre" hidden>$</span><input class="val-in" id="drmVal" type="text" inputmode="decimal" autocomplete="off" aria-describedby="drmAvg"><span class="val-unit" id="drmUnit">%</span></div>
+          </div>
+          <input class="big" type="range" id="drm" min="80" max="120" step="1" value="100" aria-label="Demurrage rate slider">
+          <div class="scale"><span id="drmMin">80%</span><span class="avg" id="drmAvg"></span><span id="drmMax">120%</span></div>
         </div>
+        <p class="hint-note">Click the number to type a value. Hours and $ per hour are averages across the selected calls; each call's own allowance or rate changes in proportion.</p>
+        <p class="val-err" id="valErr" role="alert"></p>
       </div>
       <div class="filters">
         <div class="panel-lab">Filter calls</div>
@@ -596,6 +539,95 @@ footer p { max-width: none; }
   </div>
 </section>
 
+<!-- ============================== KEY RESULTS (baseline + sensitivity) -->
+<section class="block" id="results">
+  <div class="sec-head">
+    <div class="kicker">Key results · baseline, contract terms as supplied</div>
+    <h2>A minority of expensive calls drives the loss</h2>
+    <p>The typical call ends close to even: the median is slightly positive. The mean is negative because a small number of calls run far over their allowance.</p>
+  </div>
+  <div class="stack">
+    <div class="card">
+      <h3>Every call, ranked from largest demurrage cost to largest despatch saving</h3>
+      <div class="chart" id="rankBase"></div>
+      <p class="note" id="rankBaseNote"></p>
+    </div>
+
+    <div class="card" id="breakdown">
+      <div class="bd-head">
+        <h3>Breakdown of the net result per call</h3>
+        <div class="seg" role="tablist" aria-label="Choose a breakdown">
+          <button type="button" role="tab" data-v="class" aria-selected="true">Vessel class</button>
+          <button type="button" role="tab" data-v="term" aria-selected="false">Terminal</button>
+          <button type="button" role="tab" data-v="cross" aria-selected="false">Terminal &times; vessel class</button>
+          <button type="button" role="tab" data-v="comm" aria-selected="false">Commodity</button>
+        </div>
+      </div>
+
+      <div class="bd-panel" data-v="class" role="tabpanel">
+        <p class="bd-title">Cost rises steadily with vessel size</p>
+        <div class="legend">
+          <span class="k"><span class="lg-line"></span>P5 to P95</span>
+          <span class="k"><span class="lg-bar"></span>middle half of calls (P25 to P75)</span>
+          <span class="k"><span class="lg-med"></span>median</span>
+          <span class="k"><span class="lg-mean"></span>mean</span>
+        </div>
+        <div class="chart" id="byClass"></div>
+        <p class="note">105 calls per class. Panamax/Kamsarmax calls account for 78% of the total net loss.</p>
+      </div>
+
+      <div class="bd-panel" data-v="term" role="tabpanel" hidden>
+        <p class="bd-title">Grain elevator against multi-bulk terminal</p>
+        <div class="legend">
+          <span class="k"><span class="lg-line"></span>P5 to P95</span>
+          <span class="k"><span class="lg-bar"></span>middle half of calls (P25 to P75)</span>
+          <span class="k"><span class="lg-med"></span>median</span>
+          <span class="k"><span class="lg-mean"></span>mean</span>
+        </div>
+        <div class="chart" id="byTerminal"></div>
+        <p class="note">280 calls at the grain elevator, 140 at the multi-bulk terminal. The multi-bulk terminal's agreed handling rates are much lower (about 12,300 t/day against 29,400), so its vessels are allowed more laytime for the same cargo.</p>
+      </div>
+
+      <div class="bd-panel" data-v="cross" role="tabpanel" hidden>
+        <p class="bd-title">The hotspot: mean net result per call</p>
+        <p>The size effect appears at both terminals but is far stronger at the multi-bulk terminal.</p>
+        <div class="scroll"><table class="heat" id="heat"></table></div>
+        <p class="note">Each cell holds 35 calls (multi-bulk) or 70 calls (grain elevator), so differences between cells are indicative rather than conclusive. Only means and medians are shown here because the tails of such small groups are unreliable.</p>
+      </div>
+
+      <div class="bd-panel" data-v="comm" role="tabpanel" hidden>
+        <p class="bd-title">By commodity (read with care)</p>
+        <p>Each commodity is handled at only one terminal and carried by only two vessel classes, so commodity differences cannot be separated from terminal and vessel-size effects. Sugar, for example, arrives on Handymax and Panamax/Kamsarmax vessels at the multi-bulk terminal only.</p>
+        <div class="legend">
+          <span class="k"><span class="lg-line"></span>P5 to P95</span>
+          <span class="k"><span class="lg-bar"></span>middle half of calls (P25 to P75)</span>
+          <span class="k"><span class="lg-med"></span>median</span>
+          <span class="k"><span class="lg-mean"></span>mean</span>
+        </div>
+        <div class="chart" id="byCommodity"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="subsec">
+  <div class="sec-head">
+    <div class="kicker">Key results · sensitivity analysis</div>
+    <h2>Allowed laytime matters about ten times more than the demurrage rate</h2>
+    <p>Each contract term is moved on its own while the others stay at their supplied values. The time each vessel actually used is held fixed.</p>
+  </div>
+  <div class="stack">
+    <div class="card">
+      <h3>Which term moves the total most</h3>
+      <div class="chart" id="tornado"></div>
+      <p class="note">Bars show the total net result for all 420 calls at the low and high end of each range. The centre line is the baseline (−$1,058,507).</p>
+    </div>
+
+    <p class="note">The four charts below share the same vertical scale, so the steepness of each line can be compared directly.</p>
+    <div class="sweeps" id="sweeps"></div>
+  </div>
+  </div>
+</section>
+
 <!-- ============================== INSIGHTS -->
 <section class="block" id="insights">
   <div class="sec-head">
@@ -625,7 +657,7 @@ footer p { max-width: none; }
       <li><strong>Small groups.</strong> Terminal × class cells hold 35 to 70 calls. Their means are indicative, and their tails (P5, P95, worst case) are not reliable.</li>
       <li><strong>Commodity is tied to terminal and vessel class.</strong> Each commodity appears at one terminal on two vessel classes, so its effect cannot be isolated.</li>
       <li><strong>A balanced dataset.</strong> The near-identical demurrage share in every group suggests the data was built to be balanced. How often demurrage occurs should not be generalised to other fleets or ports.</li>
-      <li><strong>One lever at a time.</strong> The sensitivity charts move one term while holding the rest fixed, and combined changes are only explored in the what-if model.</li>
+      <li><strong>One lever at a time.</strong> The sensitivity charts move one term while holding the rest fixed, and combined changes are only explored in the interactive model.</li>
       <li><strong>Behaviour held fixed.</strong> The model assumes vessels would use the same time under different terms. In practice, more generous laytime can lead to slower operations.</li>
       <li><strong>Simplified laytime counting.</strong> Excluded delay events are subtracted as supplied. Clauses such as "once on demurrage, always on demurrage", weather working days or shifting time are not modelled separately.</li>
       <li><strong>One year, two terminals.</strong> 420 calls during 2024 at two terminals.</li>
@@ -1025,10 +1057,18 @@ function breakEven(key, a, b) {
 
 (function sweeps() {
   var box = document.getElementById("sweeps");
-  LEVERS.forEach(function (L) {
+  var XLAB = { lm: "Allowed laytime multiplier (1.00\u00d7 = contract)", lo: "Hours added to every call's allowed laytime",
+    drm: "Demurrage rate multiplier (1.00\u00d7 = contract)", ratio: "Despatch rate as % of demurrage rate (50% = contract)" };
+  var DATA = LEVERS.map(function (L) {
     var xs = [];
     for (var v = L.sweep[0]; v <= L.sweep[1] + 1e-9; v += L.sweep[2]) xs.push(Math.round(v * 1000) / 1000);
-    var ys = xs.map(function (v) { return totalAt(L.key, v); });
+    return { xs: xs, ys: xs.map(function (v) { return totalAt(L.key, v); }) };
+  });
+  var all = [0];                                   // one y-scale for all four charts, so slopes compare fairly
+  DATA.forEach(function (d) { all = all.concat(d.ys); });
+  var GLO = Math.min.apply(null, all), GHI = Math.max.apply(null, all);
+  LEVERS.forEach(function (L, li) {
+    var xs = DATA[li].xs, ys = DATA[li].ys;
     var be = breakEven(L.key, L.sweep[0], L.sweep[1]);
     var card = document.createElement("div"); card.className = "card";
     var title = document.createElement("h3"); title.textContent = L.name; card.appendChild(title);
@@ -1042,11 +1082,11 @@ function breakEven(key, a, b) {
     }
     card.appendChild(note); box.appendChild(card);
 
-    var W = 520, H = 270, Lp = 72, R = 18, T = 14, B = 40;
+    var W = 520, H = 290, Lp = 92, R = 18, T = 14, B = 52;
     var s = newSvg(c, W, H, L.name + " sweep");
     s.style.minWidth = "0";
-    var lo = Math.min.apply(null, ys.concat([0])), hi = Math.max.apply(null, ys.concat([0]));
-    var tk = ticks(lo, hi, 5), y0 = Math.min(lo, tk[0]), y1 = Math.max(hi, tk[tk.length - 1]);
+    var lo = GLO, hi = GHI;
+    var tk = ticks(lo, hi, 6), y0 = Math.min(lo, tk[0]), y1 = Math.max(hi, tk[tk.length - 1]);
     var y = scale(y0, y1, H - B, T), x = scale(xs[0], xs[xs.length - 1], Lp, W - R);
     el("rect", { x: Lp, y: y(0), width: W - R - Lp, height: y(y0) - y(0), fill: css("--dem"), opacity: 0.06 }, s);
     el("rect", { x: Lp, y: y(y1), width: W - R - Lp, height: y(0) - y(y1), fill: css("--des"), opacity: 0.06 }, s);
@@ -1065,7 +1105,8 @@ function breakEven(key, a, b) {
       el("line", { x1: x(be), x2: x(be), y1: T, y2: H - B, stroke: css("--des"), "stroke-dasharray": "4 3", "stroke-width": 1.5 }, s);
       el("circle", { cx: x(be), cy: y(0), r: 4.5, fill: css("--des") }, s);
     }
-    el("text", { x: (Lp + W - R) / 2, y: H - 6, "text-anchor": "middle", "font-size": 11.5 }, s, "Total net result, all 420 calls");
+    el("text", { x: (Lp + W - R) / 2, y: H - 8, "text-anchor": "middle", "font-size": 12.5 }, s, XLAB[L.key]);
+    el("text", { x: 14, y: (T + H - B) / 2, "text-anchor": "middle", "font-size": 12.5, transform: "rotate(-90 14 " + ((T + H - B) / 2) + ")" }, s, "Total net result, all 420 calls");
   });
 })();
 
@@ -1073,9 +1114,54 @@ function breakEven(key, a, b) {
 var $ = function (id) { return document.getElementById(id); };
 var COMMS = ["corn", "fertiliser", "oilseeds", "soybean", "sugar", "wheat"];
 var cap = function (v) { return v.charAt(0).toUpperCase() + v.slice(1); };
+// Contract terms are held as % of the contract; hours and $/hour are converted using the average of the selected calls.
+var TERMS = { lm: { pct: 100, unit: "pct", min: 10, max: 300 }, drm: { pct: 100, unit: "pct", min: 10, max: 300 } };
 function params() {
-  return { lm: Number($("lm").value) / 100, drm: Number($("drm").value) / 100,
+  return { lm: TERMS.lm.pct / 100, drm: TERMS.drm.pct / 100,
     terminal: $("fTerm").value, vclass: $("fClass").value, commodity: $("fComm").value };
+}
+function poolAvg(id) {   // average base value across the selected calls: hours of allowed laytime, or demurrage $ per hour
+  var pool = runModel(CALLS, { terminal: $("fTerm").value, vclass: $("fClass").value, commodity: $("fComm").value });
+  if (!pool.length) return null;
+  var sum = pool.reduce(function (s, r) { return s + (id === "lm" ? r.k.allowed : r.k.dem / 24); }, 0);
+  return sum / pool.length;
+}
+function fmtNum(v, dp) { return v.toLocaleString("en-US", { minimumFractionDigits: dp, maximumFractionDigits: dp }); }
+function fitInput(inp) { inp.style.width = Math.max(3, inp.value.length + 0.6) + "ch"; }
+function showTerm(id) {
+  var t = TERMS[id], avg = poolAvg(id), abs = t.unit === "abs" && avg !== null;
+  var inp = $(id + "Val");
+  if (document.activeElement !== inp) {
+    inp.value = abs ? fmtNum(avg * t.pct / 100, id === "lm" ? 1 : 0) : fmtNum(t.pct, Math.round(t.pct) === t.pct ? 0 : 1);
+  }
+  fitInput(inp);
+  $(id + "Unit").textContent = abs ? (id === "lm" ? "h" : "/h") : "%";
+  if (id === "drm") $("drmPre").hidden = !abs;
+  var sl = $(id);
+  sl.value = Math.max(80, Math.min(120, t.pct));
+  paintSlider(sl);
+  var end = function (p) { return abs ? (id === "lm" ? fmtNum(avg * p / 100, 1) + " h" : "$" + fmtNum(avg * p / 100, 0) + "/h") : p + "%"; };
+  $(id + "Min").textContent = end(80); $(id + "Max").textContent = end(120);
+  Array.prototype.forEach.call(document.querySelectorAll('[data-term="' + id + '"] .unit-seg button'), function (b) {
+    b.setAttribute("aria-pressed", String(b.getAttribute("data-u") === t.unit));
+  });
+}
+function commitTerm(id) {
+  var t = TERMS[id], inp = $(id + "Val"), raw = inp.value.replace(/[,$%\sh\/]/g, "");
+  var v = Number(raw), avg = poolAvg(id);
+  $("valErr").textContent = "";
+  if (raw === "" || !isFinite(v) || v <= 0) {
+    $("valErr").textContent = "Enter a positive number for " + (id === "lm" ? "allowed laytime." : "the demurrage rate.");
+    inp.blur(); showTerm(id); return;
+  }
+  var pctV = t.unit === "abs" && avg ? v / avg * 100 : v;
+  if (pctV < t.min || pctV > t.max) {
+    $("valErr").textContent = "That is " + fmtNum(pctV, 0) + "% of the contract. Values are limited to " + t.min + "%\u2013" + t.max + "%, so it was capped.";
+    pctV = Math.max(t.min, Math.min(t.max, pctV));
+  }
+  t.pct = pctV;
+  inp.blur();
+  update();
 }
 function paintSlider(inp) {
   var f = (inp.value - inp.min) / (inp.max - inp.min) * 100;
@@ -1123,7 +1209,7 @@ function highlightRow(i) {
 var lastRows = [], CI_TIMER = null;
 function update() {
   var p = params();
-  ["lm", "drm"].forEach(function (id) { paintSlider($(id)); $(id + "Out").textContent = $(id).value + "%"; });
+  ["lm", "drm"].forEach(showTerm);
   var rows = runModel(CALLS, p);
   lastRows = rows;
   var empty = rows.length === 0;
@@ -1133,7 +1219,9 @@ function update() {
   var avgA = pool.reduce(function (s, r) { return s + r.k.allowed; }, 0) / pool.length * p.lm;
   var avgR = pool.reduce(function (s, r) { return s + r.k.dem; }, 0) / pool.length * p.drm;
   $("lmAvg").textContent = "avg " + avgA.toFixed(1) + " h per call";
-  $("drmAvg").textContent = "avg " + money(avgR) + " per day";
+  $("drmAvg").textContent = TERMS.drm.unit === "abs" ? "= " + money(avgR) + " per day" : "avg " + money(avgR / 24) + " per hour";
+  if (TERMS.lm.unit === "abs") $("lmAvg").textContent = fmtNum(TERMS.lm.pct, 1) + "% of contract";
+  if (TERMS.drm.unit === "abs") $("drmAvg").textContent = fmtNum(TERMS.drm.pct, 1) + "% of contract (" + money(avgR) + "/day)";
 
   var st = summarize(rows), ref = summarize(pool);
   kpis($("kpiWhat"), st, ref);
@@ -1160,10 +1248,24 @@ function update() {
   drawRank($("rankWhat"), rows, "Net result of every call under the chosen terms");
   $("rankWhatNote").textContent = decileNote(rows) + " Median call " + money(st.p50) + "; worst call " + money(st.min) + ".";
 }
-["lm", "drm", "fTerm", "fClass", "fComm", "groupBy"].forEach(function (id) { $(id).addEventListener("input", update); });
+["fTerm", "fClass", "fComm", "groupBy"].forEach(function (id) { $(id).addEventListener("input", update); });
+["lm", "drm"].forEach(function (id) {
+  $(id).addEventListener("input", function () { TERMS[id].pct = Number($(id).value); $("valErr").textContent = ""; update(); });
+  var inp = $(id + "Val");
+  inp.addEventListener("focus", function () { inp.select(); });
+  inp.addEventListener("input", function () { fitInput(inp); });
+  inp.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") { e.preventDefault(); commitTerm(id); }
+    if (e.key === "Escape") { inp.blur(); showTerm(id); }
+  });
+  inp.addEventListener("change", function () { commitTerm(id); });
+  Array.prototype.forEach.call(document.querySelectorAll('[data-term="' + id + '"] .unit-seg button'), function (b) {
+    b.addEventListener("click", function () { TERMS[id].unit = b.getAttribute("data-u"); update(); });
+  });
+});
 $("showCI").addEventListener("change", function () { $("bpBox").classList.toggle("no-ci", !this.checked); $("ciGuide").hidden = !this.checked; });
 $("reset").addEventListener("click", function () {
-  $("lm").value = 100; $("drm").value = 100; $("fTerm").value = "all"; $("fClass").value = "all"; $("fComm").value = "all"; $("groupBy").value = "none";
+  TERMS.lm.pct = 100; TERMS.drm.pct = 100; TERMS.lm.unit = "pct"; TERMS.drm.unit = "pct"; $("valErr").textContent = ""; $("fTerm").value = "all"; $("fClass").value = "all"; $("fComm").value = "all"; $("groupBy").value = "none";
   update();
 });
 $("copy").addEventListener("click", function () {
@@ -1197,6 +1299,7 @@ update();
   });
   function show(scrollTop) {
     var id = (location.hash || "").slice(1);
+    id = { whatif: "interactive", sensitivity: "results" }[id] || id;
     if (!document.getElementById(id) || !names[id]) id = "overview";
     secs.forEach(function (sec) { sec.classList.toggle("active", sec.id === id); });
     links.forEach(function (a) {
